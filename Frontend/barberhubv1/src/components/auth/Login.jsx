@@ -15,15 +15,19 @@ export default function Login() {
 
 const handleSubmit = async (e) => {
     e.preventDefault();
-    await login(formData.email, formData.password);
     
-    // Route them based on the mock email we set up
-    if (formData.email === 'admin@barberhub.com') {
-      navigate('/admin/dashboard');
-    } else {
-      navigate('/dashboard');
+    // Call the real AuthContext login function
+    const result = await login(formData.email, formData.password);
+    
+    // If successful, the database told us their exact role. Route them accordingly!
+    if (result && result.success) {
+      if (result.role === 'Admin') {
+        navigate('/admin/dashboard');
+      } else {
+        navigate('/dashboard');
+      }
     }
-  };
+};
 
   return (
     <div className="min-h-screen flex flex-col justify-center items-center bg-barber-bg px-6 font-sans">
