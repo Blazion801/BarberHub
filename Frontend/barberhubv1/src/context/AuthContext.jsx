@@ -1,4 +1,5 @@
 import { createContext, useState, useContext } from 'react';
+import axios from 'axios'; // We need axios to talk to the backend
 
 // 1. Create the Context
 const AuthContext = createContext(null);
@@ -8,21 +9,36 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null); // null means no user is logged in
 
   const login = async (email, password) => {
-    // TODO: Replace with actual Axios call to backend (POST /api/login)
-    console.log('Simulating backend authentication for:', email);
-    
-    // Mock RBAC logic based on SRS REQ-1.5
-    if (email === 'admin@barberhub.com') {
-      setUser({ role: 'Admin', name: 'Master Admin', email });
-    } else {
-      // Standard customer gets the 3-life payload (REQ-4.1)
-      setUser({ role: 'Customer', name: 'John Doe', email, life_count: 3, is_blocked: false });
+    try {
+      // 1. The REAL database connection
+      const response = await axios.post('http://localhost:5000/api/login', {
+        email,
+        password
+      });
+
+      // 2. Extract the Golden Ticket (JWT) and user profile from your backend
+      const { token, user: userData } = response.data;
+
+      // 3. Save the token to the browser's memory so they don't log out when refreshing
+      localStorage.setItem('barberToken', token);
+
+      // 4. Set the global user state (Role, Life Count, etc.)
+      setUser(userData);
+      
+      // 5. Tell the Login.jsx page that it was successful so it can route them
+      return { success: true, role: userData.role };
+
+    } catch (error) {
+      console.error('Login error:', error);
+      // If backend sends a 404 (Not Found) or 401 (Wrong Password), display it!
+      alert(error.response?.data?.message || 'Gagal login. Periksa kembali email dan password.');
+      return { success: false };
     }
-    
-    return true; // Simulate success
   };
 
   const logout = () => {
+    // Shred the ticket and clear the user
+    localStorage.removeItem('barberToken');
     setUser(null);
   };
 
