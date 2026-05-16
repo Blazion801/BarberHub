@@ -8,17 +8,17 @@ export default {
     extend: {
       colors: {
         barber: {
-          bg: '#0E0E0E',       // Main dark background
-          surface: '#131313',  // Bottom container background
-          input: '#0A0A0A',    // Input fields background
-          gold: '#F2CA50',     // Brand yellow/gold
-          text: '#D0C5AF',     // Primary beige text
-          light: '#F5F5F5',    // Off-white for headers
-          muted: '#4D4635',    // Muted borders
+          bg: '#0F172A',       // Deep Slate
+          surface: '#1E293B',  // Lighter Slate for cards/inputs
+          input: '#1E293B',    // Matching surface for inputs
+          accent: '#D4AF37',   // Metallic Brass/Gold
+          text: '#F8FAFC',     // Ice White
+          muted: '#64748B',    // Cool Gray for borders/placeholders
         }
       },
       fontFamily: {
-        sans: ['Inter', 'sans-serif'], 
+        sans: ['Montserrat', 'sans-serif'],    // Clean body text
+        serif: ['Playfair Display', 'serif'],  // Luxury headers
       }
     },
   },
