@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ArrowLeft, User, Phone, Mail, Lock, UserPlus } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import toast from 'react-hot-toast';
 
 export default function Register() {
   const navigate = useNavigate();
@@ -17,41 +18,44 @@ export default function Register() {
     setError('');
   };
 
-  const handleSubmit = async (e) => {
-  e.preventDefault();
-  setError('');
+const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
 
-  // Front-end validations Gavinn built
-  if (formData.whatsapp.length < 10) { 
-    setError('Nomor WhatsApp minimal 10 angka.'); 
-    return; 
-  }
-  if (formData.password.length < 8) { 
-    setError('Password minimal 8 karakter.'); 
-    return; 
-  }
-  if (formData.password !== formData.confirmPassword) { 
-    setError('Konfirmasi password tidak cocok.'); 
-    return; 
-  }
-
-  try {
-    // Connect to your Node/Express server running on Port 5000
-    const response = await axios.post('http://localhost:5000/api/register', {
-      name: formData.fullName, // Map Gavinn's UI fields to your database columns
-      email: formData.email,
-      password: formData.password
-    });
-
-    if (response.status === 201) {
-      alert('Akun berhasil dibuat! Silakan masuk.');
-      navigate('/login'); // Automatically redirect them to the login screen
+    if (formData.whatsapp.length < 10) { 
+      setError('Nomor WhatsApp minimal 10 angka.'); 
+      return; 
     }
-  } catch (err) {
-    console.error('Registration API Error:', err);
-    setError(err.response?.data?.message || 'Gagal terhubung ke server backend.');
-  }
-};
+    if (formData.password.length < 8) { 
+      setError('Password minimal 8 karakter.'); 
+      return; 
+    }
+    if (formData.password !== formData.confirmPassword) { 
+      setError('Konfirmasi password tidak cocok.'); 
+      return; 
+    }
+
+    try {
+      const response = await axios.post('http://localhost:5000/api/register', {
+        name: formData.fullName, 
+        whatsapp: formData.whatsapp,
+        email: formData.email,
+        password: formData.password
+      });
+
+      if (response.status === 201) {
+        toast.success('Akun berhasil dibuat! Silakan masuk.');
+        
+        setTimeout(() => {
+          navigate('/login');
+        }, 1500); 
+      }
+    } catch (err) {
+      console.error('Registration API Error:', err);
+      toast.error(err.response?.data?.message || 'Gagal terhubung ke server backend.');
+      // setError(err.response?.data?.message || 'Gagal terhubung ke server backend.');
+    }
+  };
 
   return (
     <div className="min-h-screen flex flex-col bg-barber-bg font-sans">
