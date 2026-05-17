@@ -4,7 +4,7 @@ const bcrypt = require('bcrypt');
 require('dotenv').config();
 const jwt = require('jsonwebtoken');
 
-const db = require('./config/db'); // Brings in your MySQL connection
+const db = require('./config/db');
 
 const app = express();
 app.use(cors());
@@ -18,20 +18,20 @@ app.get('/api/status', (req, res) => {
 // 2. User Registration Route
 app.post('/api/register', async (req, res) => {
     try {
-        const { name, email, password } = req.body;
+        // GAVIN'S FIX: Extract whatsapp from the frontend request
+        const { name, whatsapp, email, password } = req.body;
         
-        // Hash the password (Security Requirement)
         const hashedPassword = await bcrypt.hash(password, 10);
         
-        // Insert the user into the database you just built
+        // GAVIN'S FIX: Match the exact database columns we created in XAMPP
         const [result] = await db.execute(
-            'INSERT INTO users (full_name, email, password_hash) VALUES (?, ?, ?)',
-            [name, email, hashedPassword]
+            'INSERT INTO users (name, whatsapp, email, password) VALUES (?, ?, ?, ?)',
+            [name, whatsapp, email, hashedPassword]
         );
         
         res.status(201).json({ message: 'Registration successful!' });
     } catch (error) {
-        console.error(error);
+        console.error('Registration Error:', error);
         res.status(500).json({ message: 'Server error during registration.' });
     }
 });
@@ -41,37 +41,35 @@ app.post('/api/login', async (req, res) => {
     try {
         const { email, password } = req.body;
 
-        // 1. Check if the email exists in the database
         const [users] = await db.execute('SELECT * FROM users WHERE email = ?', [email]);
         if (users.length === 0) {
             return res.status(404).json({ message: 'Akun tidak ditemukan. Silakan daftar.' });
         }
 
-        const user = users[0]; // Grab the first matched user
+        const user = users[0]; 
 
-        // 2. Compare the typed password against the hashed password in the DB
-        const isMatch = await bcrypt.compare(password, user.password_hash);
+        // GAVIN'S FIX: Check against 'user.password', not 'password_hash'
+        const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) {
             return res.status(401).json({ message: 'Password salah.' });
         }
 
-        // 3. Generate the JSON Web Token (The Golden Ticket)
         const token = jwt.sign(
-            { id: user.id, role: user.role, name: user.full_name },
+            { id: user.id, role: user.role, name: user.name },
             process.env.JWT_SECRET,
             { expiresIn: '24h' }
         );
 
-        // 4. Send the token and user data back to Gavinn's frontend
         res.status(200).json({
             message: 'Login berhasil!',
             token: token,
             user: {
                 id: user.id,
-                name: user.full_name,
+                name: user.name,
+                whatsapp: user.whatsapp,
                 email: user.email,
                 role: user.role,
-                life_count: user.life_count
+                life_count: 3 // Defaulting to 3 based on your SRS REQ-4.1
             }
         });
 
@@ -80,7 +78,6 @@ app.post('/api/login', async (req, res) => {
         res.status(500).json({ message: 'Server error saat login.' });
     }
 });
-
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {

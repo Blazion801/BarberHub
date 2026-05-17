@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import toast from 'react-hot-toast';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -13,21 +14,24 @@ export default function Login() {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-const handleSubmit = async (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     
-    // Call the real AuthContext login function
+    // Call the AuthContext login function
     const result = await login(formData.email, formData.password);
     
-    // If successful, the database told us their exact role. Route them accordingly!
-    if (result && result.success) {
+    if (result.success) {
+      toast.success('Login berhasil!');
+      
       if (result.role === 'Admin') {
         navigate('/admin/dashboard');
       } else {
         navigate('/dashboard');
       }
+    } else {
+      toast.error(result.message);
     }
-};
+  };
 
   return (
     <div className="min-h-screen flex flex-col justify-center items-center bg-barber-bg px-6 font-sans">
