@@ -1,0 +1,9 @@
+# Abaikan folder berat bawaan Node.js
+node_modules/
+
+# Abaikan foto upload testing
+Backend/uploads/
+
+# Abaikan file aneh yang tidak sengaja terbuat
+Frontend/barberhubv1/npm
+Frontend/barberhubv1/barberhubv1@0.0.0
