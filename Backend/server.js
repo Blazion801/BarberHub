@@ -96,11 +96,9 @@ app.post("/api/register", async (req, res) => {
   } catch (error) {
     console.error("Registration Error:", error);
     if (error.code === "ER_DUP_ENTRY") {
-      return res
-        .status(409)
-        .json({
-          message: "Email sudah terdaftar. Silakan gunakan email lain.",
-        });
+      return res.status(409).json({
+        message: "Email sudah terdaftar. Silakan gunakan email lain.",
+      });
     }
     res.status(500).json({ message: "Server error during registration." });
   }
@@ -283,11 +281,9 @@ app.post("/api/bookings", authenticateToken, async (req, res) => {
     const slot = slots[0];
     if (slot.status !== "Available") {
       await connection.rollback();
-      return res
-        .status(409)
-        .json({
-          message: "Maaf, slot waktu ini baru saja dipesan oleh pengguna lain.",
-        });
+      return res.status(409).json({
+        message: "Maaf, slot waktu ini baru saja dipesan oleh pengguna lain.",
+      });
     }
 
     const timeSlotId = slot.id;
@@ -306,11 +302,9 @@ app.post("/api/bookings", authenticateToken, async (req, res) => {
   } catch (error) {
     await connection.rollback();
     console.error("Booking Concurrency Error:", error);
-    res
-      .status(500)
-      .json({
-        message: "Gagal melakukan booking akibat gangguan konkurensi jaringan.",
-      });
+    res.status(500).json({
+      message: "Gagal melakukan booking akibat gangguan konkurensi jaringan.",
+    });
   } finally {
     connection.release();
   }
@@ -367,11 +361,9 @@ app.put("/api/bookings/cancel", authenticateToken, async (req, res) => {
 
     if (bookings.length === 0) {
       await connection.rollback();
-      return res
-        .status(404)
-        .json({
-          message: "Booking tidak ditemukan atau tidak dapat dibatalkan.",
-        });
+      return res.status(404).json({
+        message: "Booking tidak ditemukan atau tidak dapat dibatalkan.",
+      });
     }
 
     const timeSlotId = bookings[0].time_slot_id;
@@ -412,21 +404,17 @@ app.put("/api/bookings/cancel", authenticateToken, async (req, res) => {
           [customerId],
         );
         await connection.commit();
-        return res
-          .status(200)
-          .json({
-            message:
-              "Booking dibatalkan. Penalti: Waktu < 3 Jam, Kredit Kursi 0/3. Akun Anda otomatis ditangguhkan.",
-          });
+        return res.status(200).json({
+          message:
+            "Booking dibatalkan. Penalti: Waktu < 3 Jam, Kredit Kursi 0/3. Akun Anda otomatis ditangguhkan.",
+        });
       }
 
       await connection.commit();
-      return res
-        .status(200)
-        .json({
-          message:
-            "Booking dibatalkan. (Penalti: Waktu Pembatalan < 3 Jam, Kredit Kursi -1)",
-        });
+      return res.status(200).json({
+        message:
+          "Booking dibatalkan. (Penalti: Waktu Pembatalan < 3 Jam, Kredit Kursi -1)",
+      });
     }
 
     await connection.commit();
@@ -443,17 +431,25 @@ app.put("/api/bookings/cancel", authenticateToken, async (req, res) => {
 });
 
 // 10. Get Fresh User Data
+// Mengambil detail satu user (Pelanggan)
 app.get("/api/users/:id", async (req, res) => {
   try {
+    const userId = req.params.id;
+
+    // FIX: Tambahkan full_name, whatsapp, dan email agar bisa ditarik oleh halaman Profil!
     const [users] = await db.execute(
-      "SELECT life_count FROM users WHERE id = ?",
-      [req.params.id],
+      "SELECT id, full_name, whatsapp, email, life_count, is_blocked FROM users WHERE id = ?",
+      [userId],
     );
-    if (users.length === 0)
-      return res.status(404).json({ message: "User not found" });
+
+    if (users.length === 0) {
+      return res.status(404).json({ message: "User tidak ditemukan." });
+    }
+
     res.status(200).json(users[0]);
   } catch (error) {
-    res.status(500).json({ message: "Gagal memuat data user." });
+    console.error("Get User Error:", error);
+    res.status(500).json({ message: "Gagal mengambil data user." });
   }
 });
 
@@ -524,20 +520,16 @@ app.put(
             [customerId],
           );
           await connection.commit();
-          return res
-            .status(200)
-            .json({
-              message: `Status diperbarui menjadi ${status}. Pengguna melanggar batas toleransi (0 Nyawa), akun otomatis diblokir.`,
-            });
+          return res.status(200).json({
+            message: `Status diperbarui menjadi ${status}. Pengguna melanggar batas toleransi (0 Nyawa), akun otomatis diblokir.`,
+          });
         }
       }
 
       await connection.commit();
-      res
-        .status(200)
-        .json({
-          message: `Booking berhasil diperbarui menjadi status: ${status}!`,
-        });
+      res.status(200).json({
+        message: `Booking berhasil diperbarui menjadi status: ${status}!`,
+      });
     } catch (error) {
       await connection.rollback();
       console.error("Admin Status Update Error:", error);
@@ -547,6 +539,129 @@ app.put(
     }
   },
 );
+// 13. Admin: Delete Barber
+app.delete(
+  "/api/barbers/:id",
+  authenticateToken,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const barberId = req.params.id;
+
+      // Menghapus barber dari database.
+      // Berkat fitur 'ON DELETE CASCADE' di SQL kalian,
+      // semua time_slots dan bookings milik barber ini akan otomatis ikut terhapus bersih!
+      await db.execute("DELETE FROM barbers WHERE id = ?", [barberId]);
+
+      res.status(200).json({
+        message: "Barber berhasil dihapus beserta seluruh jadwalnya.",
+      });
+    } catch (error) {
+      console.error("Delete Barber Error:", error);
+      res.status(500).json({ message: "Gagal menghapus barber." });
+    }
+  },
+);
+
+// 14. Admin: Update/Edit Barber
+app.put(
+  "/api/barbers/:id",
+  authenticateToken,
+  requireAdmin,
+  upload.single("image"),
+  async (req, res) => {
+    try {
+      const barberId = req.params.id;
+      const { fullName, specialty, experienceYears, price } = req.body;
+
+      // Cek apakah admin mengupload foto baru atau pakai foto lama
+      if (req.file) {
+        const imageUrl = `http://localhost:5000/uploads/${req.file.filename}`;
+        await db.execute(
+          "UPDATE barbers SET full_name = ?, specialty = ?, experience_years = ?, price = ?, photo_url = ? WHERE id = ?",
+          [fullName, specialty, experienceYears, price, imageUrl, barberId],
+        );
+      } else {
+        // Kalau foto nggak diganti, update teksnya aja
+        await db.execute(
+          "UPDATE barbers SET full_name = ?, specialty = ?, experience_years = ?, price = ? WHERE id = ?",
+          [fullName, specialty, experienceYears, price, barberId],
+        );
+      }
+
+      res.status(200).json({ message: "Data kapster berhasil diubah!" });
+    } catch (error) {
+      console.error("Update Barber Error:", error);
+      res.status(500).json({ message: "Gagal mengubah data barber." });
+    }
+  },
+);
+// 15. Admin: Mengambil Daftar Semua Pelanggan
+app.get(
+  "/api/admin/customers",
+  authenticateToken,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const [customers] = await db.execute(
+        'SELECT id, full_name, whatsapp, email, life_count, is_blocked FROM users WHERE role = "Customer" ORDER BY full_name ASC',
+      );
+      res.status(200).json(customers);
+    } catch (error) {
+      console.error("Fetch Customers Error:", error);
+      res.status(500).json({ message: "Gagal mengambil data pelanggan." });
+    }
+  },
+);
+
+// 16. Admin: Reset Nyawa & Buka Blokir Pelanggan
+app.put(
+  "/api/admin/customers/:id/reset",
+  authenticateToken,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const customerId = req.params.id;
+
+      // Kembalikan nyawa jadi 3 dan pastikan status blokir dicabut
+      await db.execute(
+        "UPDATE users SET life_count = 3, is_blocked = FALSE WHERE id = ?",
+        [customerId],
+      );
+
+      res
+        .status(200)
+        .json({ message: "Nyawa berhasil di-reset dan blokir dibuka!" });
+    } catch (error) {
+      console.error("Reset Customer Error:", error);
+      res.status(500).json({ message: "Gagal mereset pelanggan." });
+    }
+  },
+);
+// 17. Customer: Update Data Profil
+app.put("/api/users/:id", authenticateToken, async (req, res) => {
+  try {
+    const userId = req.params.id;
+    const { fullName, whatsapp } = req.body;
+
+    // Keamanan berlapis: Pastikan yang ngedit beneran yang punya akun
+    if (req.user.id !== parseInt(userId)) {
+      return res
+        .status(403)
+        .json({ message: "Akses ditolak. Ini bukan akun Anda." });
+    }
+
+    await db.execute(
+      "UPDATE users SET full_name = ?, whatsapp = ? WHERE id = ?",
+      [fullName, whatsapp, userId],
+    );
+
+    res.status(200).json({ message: "Profil berhasil diperbarui!" });
+  } catch (error) {
+    console.error("Update Profile Error:", error);
+    res.status(500).json({ message: "Gagal memperbarui profil." });
+  }
+});
 
 // --- AUTOMATED BACKGROUND RECONCILIATION ENGINE (CRON JOB) ---
 cron.schedule(
