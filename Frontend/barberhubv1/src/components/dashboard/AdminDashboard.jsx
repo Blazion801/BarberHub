@@ -78,6 +78,7 @@ export default function AdminDashboard() {
   });
 
   const [editingBarberId, setEditingBarberId] = useState(null);
+  const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
 
   // --- CUSTOMER STATES ---
   const [customers, setCustomers] = useState([]);
@@ -93,16 +94,14 @@ export default function AdminDashboard() {
       );
       setCustomers(response.data);
     } catch (error) {
-      toast.error("Gagal memuat daftar pelanggan.");
+      toast.error("Failed to load customer list.");
     }
   };
 
-  // Opens the custom modal instead of window.confirm
   const handleResetLife = (customerId, customerName) => {
     setResetDialog({ isOpen: true, customerId, customerName });
   };
 
-  // Executes the actual API call after confirmation
   const executeResetLife = async () => {
     try {
       const token = localStorage.getItem("token");
@@ -113,11 +112,11 @@ export default function AdminDashboard() {
           headers: { Authorization: `Bearer ${token}` },
         },
       );
-      toast.success(`Nyawa ${resetDialog.customerName} berhasil direset!`);
+      toast.success(`Booking credits for ${resetDialog.customerName} successfully reset!`);
       fetchCustomers();
       setResetDialog({ isOpen: false, customerId: null, customerName: "" });
     } catch (error) {
-      toast.error("Gagal mereset nyawa pelanggan.");
+      toast.error("Failed to reset booking credits.");
     }
   };
 
@@ -146,7 +145,7 @@ export default function AdminDashboard() {
       const response = await axios.get("http://localhost:5000/api/barbers");
       setBarbers(response.data);
     } catch (error) {
-      toast.error("Gagal memuat daftar barber.");
+      toast.error("Failed to load barbers.");
     }
   };
 
@@ -158,7 +157,7 @@ export default function AdminDashboard() {
       );
       setDailyBookings(response.data);
     } catch (error) {
-      toast.error("Gagal memuat jadwal operasional.");
+      toast.error("Failed to load daily schedule.");
     } finally {
       setIsLoadingDaily(false);
     }
@@ -180,7 +179,7 @@ export default function AdminDashboard() {
         { bookingId, status: newStatus, customerId },
         { headers: { Authorization: `Bearer ${token}` } },
       );
-      toast.success(`Booking ditandai: ${newStatus}`);
+      toast.success(`Booking marked as: ${newStatus}`);
       fetchDailyBookings();
       setConfirmDialog({
         isOpen: false,
@@ -189,7 +188,7 @@ export default function AdminDashboard() {
         newStatus: null,
       });
     } catch (error) {
-      toast.error("Gagal mengupdate status.");
+      toast.error("Failed to update status.");
     }
   };
 
@@ -225,7 +224,7 @@ export default function AdminDashboard() {
   const handleFormSubmit = async (e) => {
     e.preventDefault();
     if (!editingBarberId && !imageFile)
-      return toast.error("Harap upload foto!");
+      return toast.error("Please upload a photo!");
 
     const submitData = new FormData();
     submitData.append("fullName", formData.fullName);
@@ -244,10 +243,10 @@ export default function AdminDashboard() {
           submitData,
           config,
         );
-        toast.success("Barber berhasil diubah!");
+        toast.success("Barber updated successfully!");
       } else {
         await axios.post("http://localhost:5000/api/barbers", submitData, config);
-        toast.success("Barber berhasil ditambahkan!");
+        toast.success("Barber added successfully!");
       }
 
       setIsModalOpen(false);
@@ -258,7 +257,7 @@ export default function AdminDashboard() {
       fetchBarbers();
     } catch (error) {
       toast.error(
-        editingBarberId ? "Gagal mengubah barber!" : "Gagal menambahkan barber!",
+        editingBarberId ? "Failed to update barber!" : "Failed to add barber!",
       );
     }
   };
@@ -294,11 +293,11 @@ export default function AdminDashboard() {
         `http://localhost:5000/api/barbers/${deleteDialog.barberId}`,
         { headers: { Authorization: `Bearer ${token}` } },
       );
-      toast.success(`${deleteDialog.barberName} berhasil dihapus!`);
+      toast.success(`${deleteDialog.barberName} deleted successfully!`);
       fetchBarbers();
       setDeleteDialog({ isOpen: false, barberId: null, barberName: "" });
     } catch (error) {
-      toast.error("Gagal menghapus barber. Pastikan Backend sudah di-restart!");
+      toast.error("Failed to delete barber. Ensure the backend is running!");
     }
   };
 
@@ -311,7 +310,7 @@ export default function AdminDashboard() {
       );
       setAvailableSlots(response.data);
     } catch (error) {
-      toast.error("Gagal memuat jadwal.");
+      toast.error("Failed to load schedule.");
     } finally {
       setIsLoadingSchedule(false);
     }
@@ -323,7 +322,7 @@ export default function AdminDashboard() {
     fetchSchedule(barber, selectedDate);
   };
 
-  const handleLogout = () => {
+  const confirmLogout = () => {
     logout();
     navigate("/login");
   };
@@ -340,46 +339,46 @@ export default function AdminDashboard() {
           </span>
         </div>
         <button
-          onClick={handleLogout}
+          onClick={() => setIsLogoutModalOpen(true)}
           className="p-2 text-barber-muted hover:text-red-400 transition-colors flex items-center gap-2 text-sm font-medium"
         >
           <LogOut size={18} />
-          <span className="hidden sm:inline">Keluar</span>
+          <span className="hidden sm:inline">Sign Out</span>
         </button>
       </nav>
 
       <div className="max-w-6xl mx-auto px-6 mt-8">
         {/* TAB SWITCHER */}
-        <div className="flex gap-4 mb-8 border-b border-barber-muted/20 pb-4">
+        <div className="flex gap-4 mb-8 border-b border-barber-muted/20 pb-4 overflow-x-auto">
           <button
             onClick={() => setActiveTab("barbers")}
-            className={`px-6 py-3 rounded-xl font-bold transition-all ${
+            className={`px-6 py-3 rounded-xl font-bold transition-all whitespace-nowrap ${
               activeTab === "barbers"
                 ? "bg-barber-accent text-barber-bg"
                 : "bg-barber-surface text-barber-text hover:bg-barber-muted/10"
             }`}
           >
-            Manajemen Barber
+            Barber Management
           </button>
           <button
             onClick={() => setActiveTab("daily")}
-            className={`px-6 py-3 rounded-xl font-bold transition-all ${
+            className={`px-6 py-3 rounded-xl font-bold transition-all whitespace-nowrap ${
               activeTab === "daily"
                 ? "bg-barber-accent text-barber-bg"
                 : "bg-barber-surface text-barber-text hover:bg-barber-muted/10"
             }`}
           >
-            Operasional Harian
+            Daily Operations
           </button>
           <button
             onClick={() => setActiveTab("customers")}
-            className={`px-6 py-3 rounded-xl font-bold transition-all ${
+            className={`px-6 py-3 rounded-xl font-bold transition-all whitespace-nowrap ${
               activeTab === "customers"
                 ? "bg-barber-accent text-barber-bg"
                 : "bg-barber-surface text-barber-text hover:bg-barber-muted/10"
             }`}
           >
-            Pelanggan & Penalti
+            Customers & Penalties
           </button>
         </div>
 
@@ -387,9 +386,9 @@ export default function AdminDashboard() {
         {activeTab === "barbers" && (
           <div className="animate-in fade-in slide-in-from-bottom-4">
             <div className="bg-barber-surface rounded-xl border border-barber-muted/20 overflow-hidden">
-              <div className="p-6 border-b border-barber-muted/20 flex justify-between items-center bg-barber-surface">
+              <div className="p-6 border-b border-barber-muted/20 flex flex-col sm:flex-row justify-between items-start sm:items-center bg-barber-surface gap-4">
                 <h3 className="text-xl font-bold text-barber-text">
-                  Manajemen Barber
+                  Barber Management
                 </h3>
                 <button
                   onClick={() => {
@@ -399,18 +398,18 @@ export default function AdminDashboard() {
                     setImageFile(null);
                     setIsModalOpen(true);
                   }}
-                  className="bg-barber-accent text-barber-bg px-4 py-2 rounded-lg font-semibold flex items-center gap-2 hover:bg-opacity-90 transition-all active:scale-95"
+                  className="bg-barber-accent text-barber-bg px-4 py-2 rounded-lg font-semibold flex items-center gap-2 hover:bg-opacity-90 transition-all active:scale-95 w-full sm:w-auto justify-center"
                 >
-                  <Plus size={18} /> Tambah Barber
+                  <Plus size={18} /> Add Barber
                 </button>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="bg-barber-bg text-barber-muted text-sm uppercase tracking-wider border-b border-barber-muted/20">
-                      <th className="p-4 font-semibold">Nama</th>
-                      <th className="p-4 font-semibold">Spesialisasi</th>
-                      <th className="p-4 font-semibold text-right">Aksi</th>
+                      <th className="p-4 font-semibold">Name</th>
+                      <th className="p-4 font-semibold">Specialty</th>
+                      <th className="p-4 font-semibold text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -419,7 +418,7 @@ export default function AdminDashboard() {
                         key={barber.id}
                         className="border-b border-barber-muted/10 hover:bg-barber-bg/50 transition-colors"
                       >
-                        <td className="p-4 font-semibold text-barber-text flex items-center gap-3">
+                        <td className="p-4 font-semibold text-barber-text flex items-center gap-3 min-w-[200px]">
                           <img
                             src={barber.image}
                             alt={barber.name}
@@ -427,14 +426,14 @@ export default function AdminDashboard() {
                           />
                           {barber.name}
                         </td>
-                        <td className="p-4 text-barber-text/70 text-sm">
+                        <td className="p-4 text-barber-text/70 text-sm min-w-[200px]">
                           {barber.specialty}
                         </td>
                         <td className="p-4 flex justify-end gap-3 text-barber-muted">
                           <button
                             onClick={() => handleOpenSchedule(barber)}
-                            title="Cek Jadwal"
-                            className="hover:text-blue-400 bg-barber-bg p-2 rounded-md"
+                            title="Check Schedule"
+                            className="hover:text-blue-400 bg-barber-bg p-2 rounded-md transition-colors"
                           >
                             <Calendar size={18} />
                           </button>
@@ -447,7 +446,7 @@ export default function AdminDashboard() {
                           </button>
                           <button
                             onClick={() => handleDeleteClick(barber.id, barber.name)}
-                            title="Hapus"
+                            title="Delete"
                             className="hover:text-red-400 bg-barber-bg p-2 rounded-md transition-colors"
                           >
                             <Trash2 size={18} />
@@ -465,29 +464,29 @@ export default function AdminDashboard() {
         {/* TAB 2: OPERASIONAL HARIAN */}
         {activeTab === "daily" && (
           <div className="animate-in fade-in slide-in-from-bottom-4">
-            <div className="flex justify-between items-center mb-6">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
               <h2 className="text-2xl font-bold font-serif text-barber-text">
-                Jadwal Operasional
+                Daily Schedule
               </h2>
-              <div className="bg-barber-surface border border-barber-muted/20 rounded-lg p-2">
+              <div className="bg-barber-surface border border-barber-muted/20 rounded-lg p-2 w-full sm:w-auto">
                 <input
                   type="date"
                   value={adminDate}
                   onChange={(e) => setAdminDate(e.target.value)}
-                  className="bg-transparent text-barber-text outline-none font-semibold cursor-pointer"
+                  className="bg-transparent text-barber-text outline-none font-semibold cursor-pointer w-full"
                 />
               </div>
             </div>
 
             {isLoadingDaily ? (
               <div className="text-center py-10 text-barber-accent animate-pulse">
-                Memuat data operasional...
+                Loading operational data...
               </div>
             ) : dailyBookings.length === 0 ? (
               <div className="bg-barber-surface border border-barber-muted/20 rounded-xl p-10 text-center">
                 <CalendarCheck size={48} className="mx-auto text-barber-muted mb-4 opacity-50" />
                 <p className="text-barber-muted font-semibold">
-                  Tidak ada booking untuk tanggal ini.
+                  No bookings for this date.
                 </p>
               </div>
             ) : (
@@ -495,9 +494,9 @@ export default function AdminDashboard() {
                 {dailyBookings.map((booking) => (
                   <div
                     key={booking.id}
-                    className="bg-barber-surface border border-barber-muted/20 rounded-xl p-5 flex flex-col sm:flex-row justify-between items-center gap-4"
+                    className="bg-barber-surface border border-barber-muted/20 rounded-xl p-5 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4"
                   >
-                    <div className="flex items-center gap-6 w-full sm:w-auto">
+                    <div className="flex items-center gap-6 w-full lg:w-auto">
                       <div className="bg-barber-bg border border-barber-muted/30 p-3 rounded-lg text-center min-w-[5rem]">
                         <p className="text-barber-accent font-bold text-xl">
                           {booking.start_time.substring(0, 5)}
@@ -508,32 +507,33 @@ export default function AdminDashboard() {
                         <h4 className="text-lg font-bold text-barber-text">
                           {booking.customer_name}
                         </h4>
-                        <p className="text-sm text-barber-muted flex gap-2">
-                          <span>Barber: <strong>{booking.barber_name}</strong></span>{" "}|
+                        <p className="text-sm text-barber-muted flex flex-col sm:flex-row sm:gap-2 mt-1">
+                          <span>Barber: <strong>{booking.barber_name}</strong></span> 
+                          <span className="hidden sm:inline">|</span>
                           <span className="text-green-400">WA: {booking.customer_phone}</span>
                         </p>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+                    <div className="flex items-center gap-3 w-full lg:w-auto justify-start lg:justify-end mt-2 lg:mt-0">
                       {booking.status === "Upcoming" ? (
                         <>
                           <button
                             onClick={() => handleStatusUpdateClick(booking.id, "Completed", booking.customer_id)}
-                            className="bg-green-500/10 text-green-400 border border-green-500/30 px-4 py-2 rounded-lg font-bold hover:bg-green-500 hover:text-white transition-all flex items-center gap-2"
+                            className="bg-green-500/10 text-green-400 border border-green-500/30 px-4 py-2 rounded-lg font-bold hover:bg-green-500 hover:text-white transition-all flex items-center gap-2 text-sm flex-1 lg:flex-none justify-center"
                           >
-                            <CheckCircle size={18} /> Hadir / Selesai
+                            <CheckCircle size={18} /> Completed
                           </button>
                           <button
                             onClick={() => handleStatusUpdateClick(booking.id, "No-Show", booking.customer_id)}
-                            className="bg-red-500/10 text-red-400 border border-red-500/30 px-4 py-2 rounded-lg font-bold hover:bg-red-500 hover:text-white transition-all flex items-center gap-2"
+                            className="bg-red-500/10 text-red-400 border border-red-500/30 px-4 py-2 rounded-lg font-bold hover:bg-red-500 hover:text-white transition-all flex items-center gap-2 text-sm flex-1 lg:flex-none justify-center"
                           >
                             <AlertTriangle size={18} /> No-Show
                           </button>
                         </>
                       ) : (
                         <span
-                          className={`px-4 py-2 rounded-lg font-bold border ${
+                          className={`px-4 py-2 rounded-lg font-bold border text-sm w-full lg:w-auto text-center ${
                             booking.status === "Completed"
                               ? "bg-green-500/10 text-green-400 border-green-500/20"
                               : booking.status === "No-Show"
@@ -558,24 +558,24 @@ export default function AdminDashboard() {
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
               <div>
                 <h2 className="text-2xl font-bold font-serif text-barber-text">
-                  Daftar Pelanggan
+                  Customer List
                 </h2>
                 <p className="text-sm text-barber-muted mt-1">
-                  Kelola sisa kredit kursi dan status blokir pelanggan.
+                  Manage booking credits and blocked statuses.
                 </p>
               </div>
-              <div className="flex gap-3">
-                <div className="bg-barber-surface border border-barber-muted/20 px-4 py-2 rounded-lg flex items-center gap-3 shadow-sm">
+              <div className="flex gap-3 w-full md:w-auto">
+                <div className="bg-barber-surface border border-barber-muted/20 px-4 py-2 rounded-lg flex items-center gap-3 shadow-sm flex-1 md:flex-none justify-center">
                   <Users size={18} className="text-barber-accent" />
                   <div>
                     <p className="text-[10px] text-barber-muted font-bold uppercase tracking-wider">Total</p>
                     <p className="text-lg font-bold text-barber-text leading-none">{customers.length}</p>
                   </div>
                 </div>
-                <div className="bg-red-950/20 border border-red-500/20 px-4 py-2 rounded-lg flex items-center gap-3 shadow-sm">
+                <div className="bg-red-950/20 border border-red-500/20 px-4 py-2 rounded-lg flex items-center gap-3 shadow-sm flex-1 md:flex-none justify-center">
                   <ShieldCheck size={18} className="text-red-400" />
                   <div>
-                    <p className="text-[10px] text-red-400/70 font-bold uppercase tracking-wider">Terblokir</p>
+                    <p className="text-[10px] text-red-400/70 font-bold uppercase tracking-wider">Blocked</p>
                     <p className="text-lg font-bold text-red-400 leading-none">
                       {customers.filter((c) => c.is_blocked).length}
                     </p>
@@ -588,7 +588,7 @@ export default function AdminDashboard() {
               <div className="text-center py-10 bg-barber-surface rounded-xl border border-barber-muted/20">
                 <Users size={48} className="mx-auto text-barber-muted/50 mb-4" />
                 <p className="text-barber-muted font-semibold">
-                  Belum ada pelanggan yang terdaftar.
+                  No customers registered yet.
                 </p>
               </div>
             ) : (
@@ -626,11 +626,11 @@ export default function AdminDashboard() {
                     <div className="flex items-center justify-between border-t border-barber-muted/10 pt-5">
                       <div className="flex flex-col">
                         <span className="text-[10px] font-bold text-barber-muted uppercase tracking-wider mb-2">
-                          Kredit Kursi
+                          Booking Credits
                         </span>
                         {cust.is_blocked ? (
                           <span className="bg-red-500/10 text-red-400 border border-red-500/20 px-2.5 py-1 rounded-md text-xs font-bold flex items-center gap-1.5 w-fit">
-                            <AlertTriangle size={12} /> TERBLOKIR
+                            <AlertTriangle size={12} /> BLOCKED
                           </span>
                         ) : (
                           <div className="flex gap-1.5">
@@ -665,7 +665,7 @@ export default function AdminDashboard() {
                               : ""
                           }
                         />
-                        {cust.life_count === 3 && !cust.is_blocked ? "Aman" : "Ampuni"}
+                        {cust.life_count === 3 && !cust.is_blocked ? "Safe" : "Forgive"}
                       </button>
                     </div>
                   </div>
@@ -682,7 +682,7 @@ export default function AdminDashboard() {
           <div className="bg-barber-surface border border-barber-muted/20 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl my-8">
             <div className="flex justify-between items-center p-6 border-b border-barber-muted/20">
               <h3 className="text-xl font-bold font-serif text-barber-text">
-                {editingBarberId ? "Edit Barber" : "Tambah Barber Baru"}
+                {editingBarberId ? "Edit Barber" : "Add New Barber"}
               </h3>
               <button
                 onClick={() => { setIsModalOpen(false); setImagePreview(null); setImageFile(null); }}
@@ -695,7 +695,7 @@ export default function AdminDashboard() {
             <form onSubmit={handleFormSubmit} className="p-6 space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-barber-text uppercase mb-2 tracking-wider">
-                  Nama Lengkap
+                  Full Name
                 </label>
                 <input
                   type="text"
@@ -704,13 +704,13 @@ export default function AdminDashboard() {
                   onChange={handleInputChange}
                   required
                   className="w-full px-4 py-3 rounded-lg bg-barber-bg border border-barber-muted/30 text-barber-text focus:border-barber-accent focus:outline-none"
-                  placeholder="Cth: John Doe"
+                  placeholder="E.g: John Doe"
                 />
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-barber-text uppercase mb-2 tracking-wider">
-                  Spesialisasi
+                  Specialty
                 </label>
                 <input
                   type="text"
@@ -719,14 +719,14 @@ export default function AdminDashboard() {
                   onChange={handleInputChange}
                   required
                   className="w-full px-4 py-3 rounded-lg bg-barber-bg border border-barber-muted/30 text-barber-text focus:border-barber-accent focus:outline-none"
-                  placeholder="Cth: Classic Fades"
+                  placeholder="E.g: Classic Fades"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-barber-text uppercase mb-2 tracking-wider">
-                    Pengalaman (Tahun)
+                    Experience (Years)
                   </label>
                   <input
                     type="number"
@@ -736,12 +736,12 @@ export default function AdminDashboard() {
                     required
                     min="0"
                     className="w-full px-4 py-3 rounded-lg bg-barber-bg border border-barber-muted/30 text-barber-text focus:border-barber-accent focus:outline-none"
-                    placeholder="Cth: 5"
+                    placeholder="E.g: 5"
                   />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-barber-text uppercase mb-2 tracking-wider">
-                    Harga Layanan (Rp)
+                    Service Price (Rp)
                   </label>
                   <input
                     type="number"
@@ -752,14 +752,14 @@ export default function AdminDashboard() {
                     min="0"
                     step="1000"
                     className="w-full px-4 py-3 rounded-lg bg-barber-bg border border-barber-muted/30 text-barber-text focus:border-barber-accent focus:outline-none"
-                    placeholder="Cth: 75000"
+                    placeholder="E.g: 75000"
                   />
                 </div>
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-barber-text uppercase mb-2 tracking-wider">
-                  Foto Profile Barber
+                  Barber Profile Photo
                 </label>
                 <div
                   className={`relative w-full h-40 border-2 border-dashed rounded-xl flex flex-col items-center justify-center transition-all ${
@@ -783,8 +783,8 @@ export default function AdminDashboard() {
                   ) : (
                     <div className="flex flex-col items-center text-barber-muted">
                       <UploadCloud size={32} className="mb-2" />
-                      <p className="text-sm font-semibold text-barber-text/80">Drag & Drop foto ke sini</p>
-                      <p className="text-xs mt-1">atau klik untuk mencari file</p>
+                      <p className="text-sm font-semibold text-barber-text/80">Drag & Drop photo here</p>
+                      <p className="text-xs mt-1">or click to browse files</p>
                     </div>
                   )}
                 </div>
@@ -796,13 +796,13 @@ export default function AdminDashboard() {
                   onClick={() => setIsModalOpen(false)}
                   className="px-6 py-3 rounded-lg font-semibold text-barber-text hover:bg-barber-muted/10 transition-colors"
                 >
-                  Batal
+                  Cancel
                 </button>
                 <button
                   type="submit"
                   className="bg-barber-accent text-barber-bg px-6 py-3 rounded-lg font-bold hover:bg-opacity-90 transition-all active:scale-95"
                 >
-                  Simpan Barber
+                  Save Barber
                 </button>
               </div>
             </form>
@@ -816,7 +816,7 @@ export default function AdminDashboard() {
           <div className="bg-barber-surface border border-barber-muted/20 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl">
             <div className="flex justify-between items-center p-6 border-b border-barber-muted/20">
               <h3 className="text-xl font-bold font-serif text-barber-text">
-                Jadwal {selectedBarber.name}
+                {selectedBarber.name}'s Schedule
               </h3>
               <button
                 onClick={() => setIsScheduleModalOpen(false)}
@@ -865,15 +865,15 @@ export default function AdminDashboard() {
                   <AlertTriangle size={24} />
                 </div>
                 <h3 className="text-xl font-bold font-serif text-barber-text">
-                  Konfirmasi No-Show
+                  No-Show Confirmation
                 </h3>
               </div>
               <p className="text-barber-text/80 text-sm leading-relaxed mb-8">
-                Apakah Anda yakin ingin menandai pelanggan ini sebagai{" "}
-                <strong>Tidak Hadir (No-Show)</strong>?
+                Are you sure you want to mark this customer as{" "}
+                <strong>No-Show</strong>?
                 <br /><br />
                 <span className="text-red-400 font-semibold">
-                  Tindakan ini akan mengurangi 1 Kesempatan Batal (Kredit Kursi) pelanggan secara otomatis.
+                  This action will automatically deduct 1 Booking Credit from the customer.
                 </span>
               </p>
               <div className="flex gap-3 justify-end">
@@ -881,13 +881,13 @@ export default function AdminDashboard() {
                   onClick={() => setConfirmDialog({ isOpen: false, bookingId: null, customerId: null, newStatus: null })}
                   className="px-5 py-2.5 rounded-xl font-semibold text-barber-text hover:bg-barber-muted/10 transition-colors"
                 >
-                  Batal
+                  Cancel
                 </button>
                 <button
                   onClick={() => executeStatusUpdate(confirmDialog.bookingId, confirmDialog.newStatus, confirmDialog.customerId)}
                   className="px-5 py-2.5 rounded-xl font-bold text-barber-bg bg-red-500 hover:bg-red-400 transition-all active:scale-95 flex items-center gap-2"
                 >
-                  Ya, Tandai No-Show
+                  Yes, Mark as No-Show
                 </button>
               </div>
             </div>
@@ -905,15 +905,15 @@ export default function AdminDashboard() {
                   <Trash2 size={24} />
                 </div>
                 <h3 className="text-xl font-bold font-serif text-barber-text">
-                  Hapus Barber
+                  Delete Barber
                 </h3>
               </div>
               <p className="text-barber-text/80 text-sm leading-relaxed mb-8">
-                Apakah Anda yakin ingin menghapus kapster{" "}
+                Are you sure you want to delete barber{" "}
                 <strong>{deleteDialog.barberName}</strong>?
                 <br /><br />
                 <span className="text-red-400 font-semibold">
-                  Semua jadwal dan data pemesanan yang terkait dengan kapster ini akan ikut terhapus secara permanen.
+                  All schedules and booking data associated with this barber will be permanently deleted.
                 </span>
               </p>
               <div className="flex gap-3 justify-end">
@@ -921,13 +921,13 @@ export default function AdminDashboard() {
                   onClick={() => setDeleteDialog({ isOpen: false, barberId: null, barberName: "" })}
                   className="px-5 py-2.5 rounded-xl font-semibold text-barber-text hover:bg-barber-muted/10 transition-colors"
                 >
-                  Batal
+                  Cancel
                 </button>
                 <button
                   onClick={executeDeleteBarber}
                   className="px-5 py-2.5 rounded-xl font-bold text-barber-bg bg-red-500 hover:bg-red-400 transition-all active:scale-95 flex items-center gap-2"
                 >
-                  Ya, Hapus
+                  Yes, Delete
                 </button>
               </div>
             </div>
@@ -945,15 +945,15 @@ export default function AdminDashboard() {
                   <RefreshCw size={24} />
                 </div>
                 <h3 className="text-xl font-bold font-serif text-barber-text">
-                  Reset Kredit Kursi
+                  Reset Booking Credits
                 </h3>
               </div>
               <p className="text-barber-text/80 text-sm leading-relaxed mb-8">
-                Yakin ingin mereset kredit dan membuka blokir untuk{" "}
+                Are you sure you want to reset credits and unblock{" "}
                 <strong>{resetDialog.customerName}</strong>?
                 <br /><br />
                 <span className="text-barber-accent font-semibold">
-                  Kredit kursi pelanggan akan dikembalikan ke 3 dan status blokir akan dicabut.
+                  The customer's booking credits will be restored to 3 and the block will be lifted.
                 </span>
               </p>
               <div className="flex gap-3 justify-end">
@@ -961,15 +961,32 @@ export default function AdminDashboard() {
                   onClick={() => setResetDialog({ isOpen: false, customerId: null, customerName: "" })}
                   className="px-5 py-2.5 rounded-xl font-semibold text-barber-text hover:bg-barber-muted/10 transition-colors"
                 >
-                  Batal
+                  Cancel
                 </button>
                 <button
                   onClick={executeResetLife}
                   className="px-5 py-2.5 rounded-xl font-bold text-barber-bg bg-barber-accent hover:bg-opacity-90 transition-all active:scale-95 flex items-center gap-2"
                 >
-                  <RefreshCw size={16} /> Ya, Ampuni
+                  <RefreshCw size={16} /> Yes, Forgive
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- MODAL 6: LOGOUT CONFIRMATION --- */}
+      {isLogoutModalOpen && (
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-barber-surface border border-barber-muted/20 rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl animate-in zoom-in duration-200 p-6 text-center">
+            <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 bg-red-500/10 text-red-400">
+              <LogOut size={32} />
+            </div>
+            <h3 className="text-xl font-bold font-serif text-barber-text mb-2">Sign Out</h3>
+            <p className="text-barber-muted text-sm leading-relaxed mb-8">Are you sure you want to sign out of the Admin Console?</p>
+            <div className="flex gap-3">
+              <button onClick={() => setIsLogoutModalOpen(false)} className="flex-1 py-3 rounded-xl font-bold text-barber-text bg-barber-bg hover:bg-barber-muted/10 transition-colors border border-barber-muted/20">Cancel</button>
+              <button onClick={confirmLogout} className="flex-1 py-3 rounded-xl font-bold text-barber-bg bg-red-500 hover:bg-red-400 transition-all">Yes, Sign Out</button>
             </div>
           </div>
         </div>
