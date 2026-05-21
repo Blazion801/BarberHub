@@ -126,16 +126,16 @@ CREATE TABLE `users` (
   `password_hash` varchar(255) NOT NULL,
   `role` enum('Customer','Admin') DEFAULT 'Customer',
   `life_count` int(11) DEFAULT 3,
+  `is_blocked` tinyint(1) DEFAULT 0,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
 --
 -- Dumping data for table `users`
 --
 
-INSERT INTO `users` (`id`, `full_name`, `whatsapp`, `email`, `password_hash`, `role`, `life_count`, `created_at`) VALUES
-(1, 'test1', '082233334444', 'test1@gmail.com', '$2b$10$0lNZQox5aYabZ1obPJ0yO.VuUC7RuS/j6x7edW2vp0Yo34MRtHmH2', 'Customer', 1, '2026-05-19 15:06:19'),
-(2, 'admin', '082299994444', 'admin@barberhub.com', '$2b$10$eUO3YHPIwle5DRgk7BiVOuaGSjptKgwHFXAV4bSuUXS5pDXBM9GG2', 'Admin', 3, '2026-05-19 15:06:46');
+INSERT INTO `users` (`id`, `full_name`, `whatsapp`, `email`, `password_hash`, `role`, `life_count`, `is_blocked`, `created_at`) VALUES
+(1, 'test1', '082233334444', 'test1@gmail.com', '$2b$10$0lNZQox5aYabZ1obPJ0yO.VuUC7RuS/j6x7edW2vp0Yo34MRtHmH2', 'Customer', 1, 0, '2026-05-19 15:06:19'),
+(2, 'admin', '082299994444', 'admin@barberhub.com', '$2b$10$eUO3YHPIwle5DRgk7BiVOuaGSjptKgwHFXAV4bSuUXS5pDXBM9GG2', 'Admin', 3, 0, '2026-05-19 15:06:46');
 
 --
 -- Indexes for dumped tables
