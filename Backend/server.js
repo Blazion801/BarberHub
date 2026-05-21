@@ -196,7 +196,7 @@ app.post("/api/barbers", upload.single("image"), async (req, res) => {
   }
 });
 
-// 6. Availability Engine (Lazy Loading)
+// 6. Availability Engine (Lazy Loading & TIME TRAVEL FIX)
 app.get("/api/availability", async (req, res) => {
   try {
     const { barberId, date } = req.query;
@@ -210,6 +210,7 @@ app.get("/api/availability", async (req, res) => {
       [barberId, date],
     );
 
+    // Jika belum ada jadwal di database untuk tanggal ini, buatkan otomatis (09:00 - 19:00)
     if (existingSlots.length === 0) {
       for (let hour = 9; hour <= 19; hour++) {
         const startTime = `${hour.toString().padStart(2, "0")}:00:00`;
@@ -225,11 +226,25 @@ app.get("/api/availability", async (req, res) => {
       "SELECT start_time, status FROM time_slots WHERE barber_id = ? AND slot_date = ?",
       [barberId, date],
     );
+    
+    // --- THE TIME TRAVEL FIX ---
     const availableTimes = finalSlots
-      .filter((slot) => slot.status === "Available")
+      .filter((slot) => {
+        // 1. Pastikan statusnya memang Available
+        if (slot.status !== "Available") return false;
+        
+        // 2. Cegah booking slot yang sudah lewat waktu (Masa Lalu)
+        const slotDateTime = new Date(`${date}T${slot.start_time}`);
+        const now = new Date();
+        
+        // Hanya kembalikan true jika waktu slot lebih besar dari waktu saat ini
+        return slotDateTime > now; 
+      })
       .map((slot) => slot.start_time);
+      
     res.status(200).json(availableTimes);
   } catch (error) {
+    console.error("Availability Error:", error);
     res.status(500).json({ message: "Gagal memuat jadwal." });
   }
 });
@@ -368,30 +383,34 @@ app.put("/api/bookings/cancel", authenticateToken, async (req, res) => {
 
     const timeSlotId = bookings[0].time_slot_id;
 
-    // Pembetulan Eror 2: Handling objek Tanggal dari MySQL secara aman tanpa pergeseran ISO String
+    // FIX: Safely reconstruct the local date to prevent UTC timezone shifting bugs
     const rawDate = bookings[0].slot_date;
-    const dateString =
-      rawDate instanceof Date
-        ? rawDate.toISOString().split("T")[0]
-        : String(rawDate).split("T")[0];
-
-    const appointmentTime = new Date(`${dateString}T${bookings[0].start_time}`);
+    const dateObj = new Date(rawDate);
+    const year = dateObj.getFullYear();
+    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const day = String(dateObj.getDate()).padStart(2, '0');
+    
+    // Construct local appointment time
+    const appointmentTime = new Date(`${year}-${month}-${day}T${bookings[0].start_time}`);
     const now = new Date();
+    
+    // Calculate difference
     const diffInHours = (appointmentTime - now) / (1000 * 60 * 60);
 
     await connection.execute(
       'UPDATE bookings SET status = "Cancelled" WHERE id = ?',
-      [bookingId],
+      [bookingId]
     );
     await connection.execute(
       'UPDATE time_slots SET status = "Available" WHERE id = ?',
-      [timeSlotId],
+      [timeSlotId]
     );
 
-    if (diffInHours < 3) {
+    // CHANGED TO 1 HOUR PENALTY RULE based on new requirements
+    if (diffInHours < 1 && diffInHours > 0) {
       await connection.execute(
         "UPDATE users SET life_count = life_count - 1 WHERE id = ?",
-        [customerId],
+        [customerId]
       );
 
       const [userCheck] = await connection.execute(

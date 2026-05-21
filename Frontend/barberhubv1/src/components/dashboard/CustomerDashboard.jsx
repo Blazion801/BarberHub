@@ -1,8 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   CalendarCheck,
   Clock,
-  Scissors,
   LogOut,
   X,
   ArrowLeft,
@@ -14,6 +13,8 @@ import {
   Mail,
   ShieldCheck,
   Edit,
+  Star,
+  MessageSquare
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { useNavigate } from "react-router-dom";
@@ -24,52 +25,41 @@ export default function CustomerDashboard() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
-  // --- GLOBAL STATES ---
-  const [activeTab, setActiveTab] = useState("booking"); // booking, history, profile
+  // --- APP NAVIGATION STATES ---
+  const [activeTab, setActiveTab] = useState("home"); // home, history, profile
 
-  // --- BOOKING STATES ---
-  const [currentLifeCount, setCurrentLifeCount] = useState(
-    user?.life_count || 3,
-  );
+  // --- GLOBAL DATA STATES ---
+  const [currentLifeCount, setCurrentLifeCount] = useState(user?.life_count || 3);
+  const [profileData, setProfileData] = useState({ fullName: "", whatsapp: "", email: "", isBlocked: false });
+  const [bookingHistory, setBookingHistory] = useState([]);
   const [barbers, setBarbers] = useState([]);
+
+  // --- BOOKING MODAL STATES ---
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
   const [selectedBarber, setSelectedBarber] = useState(null);
   const [selectedDate, setSelectedDate] = useState("");
   const [availableSlots, setAvailableSlots] = useState([]);
   const [isLoadingSlots, setIsLoadingSlots] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedTimeForConfirm, setSelectedTimeForConfirm] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // --- HISTORY STATES ---
-  const [bookingHistory, setBookingHistory] = useState([]);
-  const [historyFilter, setHistoryFilter] = useState("Semua");
+  // --- HISTORY & UI STATES ---
+  const [historyFilter, setHistoryFilter] = useState("All");
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
-
-  // --- CANCEL MODAL STATE ---
-  const [cancelData, setCancelData] = useState({
-    isOpen: false,
-    bookingId: null,
-    message: "",
-    isPenalty: false,
-  });
-
-  // --- PROFILE STATES ---
-  const [profileData, setProfileData] = useState({
-    fullName: "",
-    whatsapp: "",
-    email: "",
-    isBlocked: false,
-  });
   const [isEditingProfile, setIsEditingProfile] = useState(false);
+  
+  // --- ACTION MODALS ---
+  const [cancelData, setCancelData] = useState({ isOpen: false, bookingId: null, message: "", isPenalty: false });
+  const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
 
   // --- FETCH INITIAL DATA ---
   useEffect(() => {
     fetchBarbers();
-    if (user?.id) fetchUserProfile(); // Tarik profil langsung di awal
+    if (user?.id) fetchUserProfile();
   }, []);
 
   useEffect(() => {
-    if (activeTab === "history") fetchHistory();
+    if (activeTab === "history" || activeTab === "home") fetchHistory();
     if (activeTab === "profile") fetchUserProfile();
   }, [activeTab]);
 
@@ -77,33 +67,23 @@ export default function CustomerDashboard() {
     try {
       const response = await axios.get("http://localhost:5000/api/barbers");
       setBarbers(response.data);
-    } catch (error) {
-      console.error("Error fetching barbers:", error);
-    }
+    } catch (error) { console.error("Error fetching barbers:", error); }
   };
 
   const fetchHistory = async () => {
     if (!user?.id) return;
     setIsLoadingHistory(true);
     try {
-      const response = await axios.get(
-        `http://localhost:5000/api/bookings/customer/${user.id}`,
-      );
+      const response = await axios.get(`http://localhost:5000/api/bookings/customer/${user.id}`);
       setBookingHistory(response.data);
-    } catch (error) {
-      console.error("Error fetching history:", error);
-      toast.error("Gagal memuat riwayat booking.");
-    } finally {
-      setIsLoadingHistory(false);
-    }
+    } catch (error) { toast.error("Failed to load booking history."); }
+    finally { setIsLoadingHistory(false); }
   };
 
   const fetchUserProfile = async () => {
     if (!user?.id) return;
     try {
-      const response = await axios.get(
-        `http://localhost:5000/api/users/${user.id}`,
-      );
+      const response = await axios.get(`http://localhost:5000/api/users/${user.id}`);
       const data = response.data;
       setCurrentLifeCount(data.life_count);
       setProfileData({
@@ -112,21 +92,20 @@ export default function CustomerDashboard() {
         email: data.email,
         isBlocked: data.is_blocked,
       });
-    } catch (error) {
-      console.error("Error fetching profile:", error);
-    }
+    } catch (error) { console.error("Error fetching profile:", error); }
   };
 
-  // Helper untuk mengambil 2 huruf pertama dari nama
   const getInitials = (name) => {
     if (!name) return "C";
-    return name
-      .split(" ")
-      .map((n) => n[0])
-      .join("")
-      .substring(0, 2)
-      .toUpperCase();
+    return name.split(" ").map((n) => n[0]).join("").substring(0, 2).toUpperCase();
   };
+
+  // --- DERIVED STATE: CLOSEST UPCOMING APPOINTMENT ---
+  const upcomingAppointment = useMemo(() => {
+    const upcoming = bookingHistory.filter(b => b.status === "Upcoming");
+    if (upcoming.length === 0) return null;
+    return upcoming[upcoming.length - 1]; 
+  }, [bookingHistory]);
 
   // --- PROFILE LOGIC ---
   const handleProfileUpdate = async (e) => {
@@ -135,31 +114,19 @@ export default function CustomerDashboard() {
       const token = localStorage.getItem("token");
       await axios.put(
         `http://localhost:5000/api/users/${user.id}`,
-        {
-          fullName: profileData.fullName,
-          whatsapp: profileData.whatsapp,
-        },
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        },
+        { fullName: profileData.fullName, whatsapp: profileData.whatsapp },
+        { headers: { Authorization: `Bearer ${token}` } }
       );
-
-      toast.success("Profil berhasil diperbarui!");
+      toast.success("Profile updated successfully!");
       setIsEditingProfile(false);
       fetchUserProfile();
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Gagal memperbarui profil.");
-    }
+    } catch (error) { toast.error("Failed to update profile."); }
   };
 
-  // --- CALENDAR & BOOKING LOGIC ---
+  // --- BOOKING LOGIC ---
   const getNext7Days = () => {
     const dates = [];
-    for (let i = 0; i < 7; i++) {
-      const d = new Date();
-      d.setDate(d.getDate() + i);
-      dates.push(d);
-    }
+    for (let i = 0; i < 7; i++) { const d = new Date(); d.setDate(d.getDate() + i); dates.push(d); }
     return dates;
   };
   const calendarDays = getNext7Days();
@@ -168,23 +135,17 @@ export default function CustomerDashboard() {
   const fetchAvailableSlots = async (barberId, dateString) => {
     setIsLoadingSlots(true);
     try {
-      const response = await axios.get(
-        `http://localhost:5000/api/availability?barberId=${barberId}&date=${dateString}`,
-      );
+      const response = await axios.get(`http://localhost:5000/api/availability?barberId=${barberId}&date=${dateString}`);
       setAvailableSlots(response.data);
-    } catch (error) {
-      console.error("Error slots:", error);
-    } finally {
-      setIsLoadingSlots(false);
-    }
+    } catch (error) { console.error("Error slots:", error); }
+    finally { setIsLoadingSlots(false); }
+  };
+  const handleTimeClick = (timeStr) => {
+    setSelectedTimeForConfirm(timeStr);
   };
 
   const handleOpenBooking = (barber) => {
-    if (profileData.isBlocked) {
-      return toast.error(
-        "Akun Anda sedang diblokir karena poin penalti habis.",
-      );
-    }
+    if (profileData.isBlocked) return toast.error("Your account is blocked. Please visit the shop directly.");
     setSelectedBarber(barber);
     const today = formatDateForAPI(new Date());
     setSelectedDate(today);
@@ -200,272 +161,226 @@ export default function CustomerDashboard() {
     fetchAvailableSlots(selectedBarber.id, dateString);
   };
 
-  const handleTimeClick = (timeString) => setSelectedTimeForConfirm(timeString);
-
   const executeBooking = async () => {
-    if (!user || !user.id) return toast.error("Sesi tidak valid.");
+    if (!user || !user.id) return toast.error("Invalid session.");
     setIsSubmitting(true);
     try {
-      const payload = {
-        customerId: user.id,
-        barberId: selectedBarber.id,
-        date: selectedDate,
-        time: selectedTimeForConfirm,
-      };
+      const payload = { customerId: user.id, barberId: selectedBarber.id, date: selectedDate, time: selectedTimeForConfirm };
       const token = localStorage.getItem("token");
-      const response = await axios.post(
-        "http://localhost:5000/api/bookings",
-        payload,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      );
-
-      if (response.status === 201) {
-        toast.success("Booking berhasil! Cek Riwayat Anda.");
-        setIsBookingModalOpen(false);
-        setActiveTab("history");
-      }
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Gagal melakukan booking.");
-    } finally {
-      setIsSubmitting(false);
-    }
+      await axios.post("http://localhost:5000/api/bookings", payload, { headers: { Authorization: `Bearer ${token}` } });
+      
+      toast.success("Booking confirmed!");
+      setIsBookingModalOpen(false);
+      fetchHistory(); 
+    } catch (error) { toast.error(error.response?.data?.message || "Failed to book appointment."); }
+    finally { setIsSubmitting(false); }
   };
 
-  // --- CANCELLATION LOGIC ---
+  // --- CANCELLATION LOGIC (TIMEZONE BUG FIXED) ---
   const handleCancelBooking = (bookingId, dateString, timeString) => {
+    // FIX: Safely construct local date to avoid UTC shifts
     const aptDate = new Date(dateString);
-    const formattedDate = aptDate.toISOString().split("T")[0];
-    const appointmentDateTime = new Date(`${formattedDate}T${timeString}`);
+    const year = aptDate.getFullYear();
+    const month = String(aptDate.getMonth() + 1).padStart(2, '0');
+    const day = String(aptDate.getDate()).padStart(2, '0');
+    
+    const appointmentDateTime = new Date(`${year}-${month}-${day}T${timeString}`);
     const now = new Date();
-
     const diffInHours = (appointmentDateTime - now) / (1000 * 60 * 60);
 
     let confirmMessage = "";
     let isPenalty = false;
 
-    if (diffInHours < 3) {
-      confirmMessage =
-        "PERHATIAN: Anda membatalkan kurang dari 3 jam sebelum jadwal. Kesempatan Batal (Kredit Kursi) Anda akan berkurang 1. Yakin ingin melanjutkan?";
+    if (diffInHours < 1 && diffInHours > 0) { 
+      confirmMessage = "WARNING: You are canceling less than 1 hour before your appointment. You will lose 1 Booking Credit. Are you sure you want to proceed?";
       isPenalty = true;
     } else {
-      confirmMessage =
-        "Aman: Anda membatalkan lebih dari 3 jam sebelum jadwal. Kredit Kursi Anda tidak akan berkurang. Yakin ingin melanjutkan?";
+      confirmMessage = "Safe to cancel: You are canceling more than 1 hour before your schedule. Your Booking Credits will not be affected. Proceed?";
       isPenalty = false;
     }
 
-    setCancelData({
-      isOpen: true,
-      bookingId: bookingId,
-      message: confirmMessage,
-      isPenalty: isPenalty,
-    });
+    setCancelData({ isOpen: true, bookingId: bookingId, message: confirmMessage, isPenalty: isPenalty });
   };
 
   const executeCancellation = async () => {
     try {
       const token = localStorage.getItem("token");
-      const response = await axios.put(
-        "http://localhost:5000/api/bookings/cancel",
-        {
-          bookingId: cancelData.bookingId,
-          customerId: user.id,
-        },
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        },
+      const response = await axios.put("http://localhost:5000/api/bookings/cancel", 
+        { bookingId: cancelData.bookingId, customerId: user.id },
+        { headers: { Authorization: `Bearer ${token}` } }
       );
-
-      if (response.status === 200) {
-        toast.success(response.data.message);
-        fetchHistory();
-        setCancelData({
-          isOpen: false,
-          bookingId: null,
-          message: "",
-          isPenalty: false,
-        });
-        fetchUserProfile(); // Update life count immediately
-      }
-    } catch (error) {
-      toast.error(
-        error.response?.data?.message || "Gagal membatalkan booking.",
-      );
-    }
+      toast.success("Booking cancelled successfully.");
+      fetchHistory();
+      setCancelData({ isOpen: false, bookingId: null, message: "", isPenalty: false });
+      fetchUserProfile(); 
+    } catch (error) { toast.error("Failed to cancel booking."); }
   };
 
-  // --- HELPERS FOR UI ---
-  const getDayName = (dateObj) =>
-    dateObj.toLocaleDateString("id-ID", { weekday: "short" });
-  const getDayNumber = (dateObj) => dateObj.getDate();
-  const formatHistoryDate = (dateString) => {
-    const date = new Date(dateString);
-    const day = date.getDate();
-    const month = date
-      .toLocaleDateString("id-ID", { month: "short" })
-      .toUpperCase();
-    return { day, month };
-  };
-
-  const filteredHistory = bookingHistory.filter((booking) => {
-    if (historyFilter === "Semua") return true;
-    if (historyFilter === "Selesai" && booking.status === "Completed")
-      return true;
-    if (
-      historyFilter === "Penalti" &&
-      (booking.status === "Cancelled" || booking.status === "No-Show")
-    )
-      return true;
-    return false;
-  });
-
-  const handleLogout = () => {
+  const confirmLogout = () => {
     logout();
     navigate("/login");
   };
 
+  const formatHistoryDate = (dateString) => {
+    const date = new Date(dateString);
+    const day = date.getDate();
+    const month = date.toLocaleDateString("en-US", { month: "short" }).toUpperCase();
+    return { day, month };
+  };
+
+  const filteredHistory = bookingHistory.filter((booking) => {
+    if (historyFilter === "All") return true;
+    if (historyFilter === "Completed" && booking.status === "Completed") return true;
+    if (historyFilter === "Penalty" && (booking.status === "Cancelled" || booking.status === "No-Show")) return true;
+    return false;
+  });
+
+  const getDayName = (dateObj) => {
+    return dateObj.toLocaleDateString("en-US", { weekday: "short" }).toUpperCase();
+  };
+
+  const getDayNumber = (dateObj) => {
+    return dateObj.getDate();
+  };
+
   return (
-    <div className="min-h-screen bg-barber-bg font-sans text-barber-text pb-20 relative">
-      <nav className="bg-barber-surface border-b border-barber-muted/20 px-6 py-4 sticky top-0 z-40 flex justify-between items-center shadow-lg">
-        <h1 className="text-2xl font-bold text-barber-accent font-serif italic tracking-wide">
-          BarberHub
-        </h1>
-        <button
-          onClick={handleLogout}
-          className="text-barber-muted hover:text-red-400 transition-colors flex items-center gap-2 text-sm font-medium"
-        >
-          <span className="hidden sm:inline">Keluar</span>
-          <LogOut size={18} />
-        </button>
+    <div className="min-h-screen bg-barber-bg font-sans text-barber-text relative">
+      
+      {/* --- RESPONSIVE TOP NAVBAR --- */}
+      <nav className="bg-barber-surface border-b border-barber-muted/20 px-6 py-4 sticky top-0 z-40 shadow-md">
+        <div className="max-w-6xl mx-auto flex justify-between items-center">
+          {/* Logo */}
+          <h1 className="text-2xl font-bold text-barber-accent font-serif italic tracking-wide cursor-pointer" onClick={() => setActiveTab("home")}>
+            BarberHub
+          </h1>
+
+          {/* Desktop Navigation Links */}
+          <div className="hidden md:flex items-center gap-8 font-semibold text-sm">
+            <button onClick={() => setActiveTab("home")} className={`transition-colors ${activeTab === "home" ? "text-barber-accent" : "text-barber-muted hover:text-barber-text"}`}>
+              Home
+            </button>
+            <button onClick={() => setActiveTab("history")} className={`transition-colors ${activeTab === "history" ? "text-barber-accent" : "text-barber-muted hover:text-barber-text"}`}>
+              History
+            </button>
+            <button disabled className="text-barber-muted/50 cursor-not-allowed flex items-center gap-1">
+              Messages <span className="text-[9px] bg-barber-muted/20 px-2 py-0.5 rounded-full uppercase">Soon</span>
+            </button>
+          </div>
+
+          {/* Right Side: Profile & Logout */}
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={() => setActiveTab("profile")} 
+              className={`w-10 h-10 rounded-full font-bold text-lg flex items-center justify-center transition-all ${activeTab === "profile" ? "bg-barber-accent text-barber-bg ring-2 ring-barber-accent/50 ring-offset-2 ring-offset-barber-surface" : "bg-barber-bg border border-barber-muted/30 text-barber-text hover:border-barber-accent"}`}
+              title="My Profile"
+            >
+              {getInitials(profileData.fullName || user?.name)}
+            </button>
+            <button onClick={() => setIsLogoutModalOpen(true)} className="text-barber-muted hover:text-red-400 transition-colors p-2" title="Logout">
+              <LogOut size={20} />
+            </button>
+          </div>
+        </div>
       </nav>
 
-      <div className="max-w-6xl mx-auto px-6 mt-8">
-        {/* Header & Stats */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-6">
-          <div>
-            <h2 className="text-3xl font-bold font-serif text-barber-text mb-2">
-              Selamat datang,{" "}
-              <span className="text-barber-accent">
-                {profileData.fullName || user?.name || "Customer"}
-              </span>
-              .
-            </h2>
-            <p className="text-barber-text/70">
-              Siap untuk menyegarkan gaya Anda hari ini?
-            </p>
-          </div>
-          <div className="bg-barber-surface border border-barber-muted/20 rounded-xl p-4 flex items-center gap-4">
-            <div
-              className={`${profileData.isBlocked ? "bg-red-500/10 text-red-500" : "bg-yellow-500/10 text-yellow-500"} p-3 rounded-full`}
-            >
-              <CalendarCheck size={24} />
-            </div>
-            <div>
-              <p className="text-xs font-bold text-barber-muted uppercase tracking-wider">
-                Status Akun
-              </p>
-              <p
-                className={`text-lg font-bold ${profileData.isBlocked ? "text-red-500" : "text-barber-text"}`}
-              >
-                {profileData.isBlocked
-                  ? "TERBLOKIR (0 Kesempatan)"
-                  : `${currentLifeCount} Kesempatan Batal`}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Tab Switcher - NOW 3 COLUMNS */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-12">
-          <button
-            onClick={() => setActiveTab("booking")}
-            className={`p-6 rounded-2xl flex flex-col items-center justify-center gap-3 transition-all ${
-              activeTab === "booking"
-                ? "bg-barber-accent text-barber-bg shadow-lg shadow-barber-accent/20 font-bold"
-                : "bg-barber-surface border border-barber-muted/20 text-barber-text hover:bg-barber-muted/10 font-semibold"
-            }`}
-          >
-            <CalendarCheck
-              size={32}
-              className={activeTab === "booking" ? "" : "text-barber-muted"}
-            />
-            <span className="text-lg">Booking Baru</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab("history")}
-            className={`p-6 rounded-2xl flex flex-col items-center justify-center gap-3 transition-all ${
-              activeTab === "history"
-                ? "bg-barber-accent text-barber-bg shadow-lg shadow-barber-accent/20 font-bold"
-                : "bg-barber-surface border border-barber-muted/20 text-barber-text hover:bg-barber-muted/10 font-semibold"
-            }`}
-          >
-            <Clock
-              size={32}
-              className={activeTab === "history" ? "" : "text-barber-muted"}
-            />
-            <span className="text-lg">Riwayat & Penalti</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab("profile")}
-            className={`p-6 rounded-2xl flex flex-col items-center justify-center gap-3 transition-all ${
-              activeTab === "profile"
-                ? "bg-barber-accent text-barber-bg shadow-lg shadow-barber-accent/20 font-bold"
-                : "bg-barber-surface border border-barber-muted/20 text-barber-text hover:bg-barber-muted/10 font-semibold"
-            }`}
-          >
-            <User
-              size={32}
-              className={activeTab === "profile" ? "" : "text-barber-muted"}
-            />
-            <span className="text-lg">Profil Saya</span>
-          </button>
-        </div>
-
-        {/* TAB 1: BOOKING */}
-        {activeTab === "booking" && (
+      {/* --- MAIN CONTENT AREA --- */}
+      <div className="max-w-6xl mx-auto px-6 mt-8 pb-28">
+        
+        {/* VIEW 1: HOME (BOOKING) */}
+        {activeTab === "home" && (
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
-            <h3 className="text-2xl font-bold font-serif text-barber-text mb-6">
-              Pilih Barber Anda
-            </h3>
+            
+            {/* Hero & Credits */}
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-6">
+              <div>
+                <h2 className="text-3xl font-bold font-serif text-barber-text mb-2">
+                  Hi, <span className="text-barber-accent">{profileData.fullName ? profileData.fullName.split(' ')[0] : "Customer"}</span>
+                </h2>
+                <p className="text-barber-muted">Ready for a fresh cut?</p>
+              </div>
+
+              <div className="bg-barber-surface border border-barber-muted/20 rounded-xl p-4 flex items-center gap-4 shadow-sm w-full md:w-auto">
+                <div className={`${profileData.isBlocked ? "bg-red-500/10 text-red-500" : "bg-barber-accent/10 text-barber-accent"} p-3 rounded-xl`}>
+                  <AlertTriangle size={24} />
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-barber-muted uppercase tracking-wider">Booking Credits</p>
+                  <p className={`text-lg font-bold ${profileData.isBlocked ? "text-red-500" : "text-barber-text"}`}>
+                    {profileData.isBlocked ? "0" : currentLifeCount} / 3 Left
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Upcoming Appointment Widget */}
+            {upcomingAppointment && (
+              <div className="mb-10">
+                <h3 className="text-xl font-bold font-serif text-barber-text mb-4">Upcoming Appointment</h3>
+                <div className="bg-barber-surface border border-barber-muted/20 rounded-2xl p-6 shadow-lg max-w-2xl">
+                  <div className="flex justify-between items-center mb-5 border-b border-barber-muted/10 pb-4">
+                    <div className="flex items-center gap-4">
+                      <img src={upcomingAppointment.barber_image} alt="Barber" className="w-14 h-14 rounded-xl object-cover border border-barber-muted/20" />
+                      <div>
+                        <h3 className="font-bold text-barber-text text-lg">{upcomingAppointment.barber_name}</h3>
+                        <p className="text-xs text-barber-muted flex items-center gap-1"><Star size={12} className="text-barber-accent"/> Barber</p>
+                      </div>
+                    </div>
+                    <span className="bg-barber-accent/10 text-barber-accent px-3 py-1 rounded-md text-xs font-bold border border-barber-accent/20">Active</span>
+                  </div>
+
+                  <div className="bg-barber-bg rounded-xl p-4 flex justify-between items-center mb-4 border border-barber-muted/10">
+                    <div className="w-1/2 border-r border-barber-muted/20">
+                      <p className="text-xs text-barber-muted mb-1">Date</p>
+                      <p className="font-semibold text-sm text-barber-text">
+                        {new Date(upcomingAppointment.booking_date).toLocaleDateString("en-US", { day: "numeric", month: "short" })}
+                      </p>
+                    </div>
+                    <div className="w-1/2 pl-4">
+                      <p className="text-xs text-barber-muted mb-1">Time</p>
+                      <p className="font-semibold text-sm text-barber-accent">{upcomingAppointment.start_time.substring(0, 5)} WIB</p>
+                    </div>
+                  </div>
+
+                  <div className="bg-red-950/30 border border-red-500/20 rounded-xl p-3 flex items-start gap-3">
+                    <AlertTriangle size={16} className="text-red-400 mt-0.5 flex-shrink-0" />
+                    <p className="text-xs text-red-400 font-medium leading-relaxed">
+                      Note: Cancel &lt; 1 Hour or Late &gt; 20 Mins = Credit -1
+                    </p>
+                  </div>
+                  
+                  <div className="mt-4 pt-4 border-t border-barber-muted/10 flex justify-end">
+                    <button 
+                      onClick={() => handleCancelBooking(upcomingAppointment.id, upcomingAppointment.booking_date, upcomingAppointment.start_time)}
+                      className="text-sm font-semibold text-red-400 hover:text-red-300 transition-colors"
+                    >
+                      Cancel Booking
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <h3 className="text-xl font-bold font-serif text-barber-text mb-6">Select Your Barber</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {barbers.map((barber) => {
-                // Membelah specialty dari backend yang gabungan
-                const rawSpecialty = barber.specialty
-                  ? barber.specialty.split("•")[0].trim()
-                  : barber.specialty;
-
+                const rawSpecialty = barber.specialty ? barber.specialty.split("•")[0].trim() : barber.specialty;
                 return (
-                  <div
-                    key={barber.id}
-                    className="bg-barber-surface rounded-2xl overflow-hidden border border-barber-muted/20 flex flex-col sm:flex-row shadow-lg"
-                  >
-                    <img
-                      src={barber.image}
-                      alt={barber.name}
-                      className="w-full sm:w-48 h-48 object-cover"
-                    />
+                  <div key={barber.id} className="bg-barber-surface rounded-2xl overflow-hidden border border-barber-muted/20 flex flex-col sm:flex-row shadow-lg">
+                    <img src={barber.image} alt={barber.name} className="w-full sm:w-48 h-48 object-cover" />
                     <div className="p-6 flex flex-col justify-between flex-1">
                       <div>
                         <div className="flex justify-between items-start mb-2">
-                          <h4 className="text-xl font-bold text-barber-text">
-                            {barber.name}
-                          </h4>
-                          <span className="bg-barber-bg px-2 py-1 rounded text-sm font-bold text-barber-accent flex items-center gap-1">
-                            ★ {barber.rating}
-                          </span>
+                          <h4 className="text-xl font-bold text-barber-text">{barber.name}</h4>
+                          <span className="bg-barber-bg px-2 py-1 rounded text-sm font-bold text-barber-accent flex items-center gap-1">★ {barber.rating}</span>
                         </div>
-                        <p className="text-sm text-barber-text/70 mb-4">
-                          {rawSpecialty}
-                        </p>
+                        <p className="text-sm text-barber-muted mb-4">{rawSpecialty}</p>
                       </div>
                       <button
                         onClick={() => handleOpenBooking(barber)}
-                        className="w-full border border-barber-accent text-barber-accent py-2.5 rounded-lg font-semibold hover:bg-barber-accent hover:text-barber-bg transition-colors"
+                        className="w-full border border-barber-accent text-barber-accent py-2.5 rounded-lg font-semibold hover:bg-barber-accent hover:text-barber-bg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled={profileData.isBlocked}
                       >
-                        Booking Jadwal
+                        Book Appointment
                       </button>
                     </div>
                   </div>
@@ -475,129 +390,63 @@ export default function CustomerDashboard() {
           </div>
         )}
 
-        {/* TAB 2: HISTORY */}
+        {/* VIEW 2: HISTORY */}
         {activeTab === "history" && (
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 max-w-3xl mx-auto">
-            <div className="flex items-center gap-4 mb-6">
-              <h3 className="text-2xl font-bold text-barber-text">
-                Riwayat Reservasi
-              </h3>
-            </div>
-
+            <h3 className="text-2xl font-bold text-barber-text mb-6">Booking History</h3>
             <div className="flex gap-6 border-b border-barber-muted/20 mb-6 pb-2">
-              {["Semua", "Selesai", "Penalti"].map((tab) => (
-                <button
-                  key={tab}
-                  onClick={() => setHistoryFilter(tab)}
-                  className={`text-sm font-bold pb-2 transition-colors relative ${historyFilter === tab ? "text-barber-accent" : "text-barber-muted hover:text-barber-text"}`}
-                >
-                  {tab}
-                  {historyFilter === tab && (
-                    <div className="absolute bottom-[-2px] left-0 w-full h-[2px] bg-barber-accent rounded-t-full"></div>
-                  )}
+              {["All", "Completed", "Penalty"].map((tab) => (
+                <button key={tab} onClick={() => setHistoryFilter(tab)} className={`text-sm font-bold pb-2 transition-colors relative ${historyFilter === tab ? "text-barber-accent" : "text-barber-muted hover:text-barber-text"}`}>
+                  {tab}{historyFilter === tab && <div className="absolute bottom-[-2px] left-0 w-full h-[2px] bg-barber-accent rounded-t-full"></div>}
                 </button>
               ))}
             </div>
 
             {isLoadingHistory ? (
-              <div className="text-center py-10 text-barber-muted animate-pulse">
-                Memuat riwayat...
-              </div>
+              <div className="text-center py-10 text-barber-muted animate-pulse">Loading history...</div>
             ) : filteredHistory.length === 0 ? (
-              <div className="text-center py-10 text-barber-muted bg-barber-surface rounded-xl border border-barber-muted/10">
-                Belum ada data di kategori ini.
-              </div>
+              <div className="text-center py-10 text-barber-muted bg-barber-surface rounded-xl border border-barber-muted/10">No records found.</div>
             ) : (
               <div className="space-y-4">
                 {filteredHistory.map((booking) => {
-                  const { day, month } = formatHistoryDate(
-                    booking.booking_date,
-                  );
+                  const { day, month } = formatHistoryDate(booking.booking_date);
                   return (
-                    <div
-                      key={booking.id}
-                      className="bg-barber-surface border border-barber-muted/20 rounded-xl p-5 shadow-sm"
-                    >
+                    <div key={booking.id} className="bg-barber-surface border border-barber-muted/20 rounded-xl p-5 shadow-sm">
                       <div className="flex items-center gap-5">
                         <div className="bg-barber-bg border border-barber-muted/30 rounded-lg w-16 h-16 flex flex-col items-center justify-center flex-shrink-0">
-                          <span className="text-xl font-bold text-barber-text leading-none">
-                            {day}
-                          </span>
-                          <span className="text-xs font-semibold text-barber-muted">
-                            {month}
-                          </span>
+                          <span className="text-xl font-bold text-barber-text leading-none">{day}</span>
+                          <span className="text-xs font-semibold text-barber-muted">{month}</span>
                         </div>
                         <div className="flex-1">
-                          <h4 className="text-lg font-bold text-barber-text">
-                            {booking.barber_name}
-                          </h4>
+                          <h4 className="text-lg font-bold text-barber-text">{booking.barber_name}</h4>
                           <div className="flex items-center text-sm text-barber-muted gap-1 mt-1">
-                            <Clock size={14} />{" "}
-                            {booking.start_time.substring(0, 5)} WIB
+                            <Clock size={14} /> {booking.start_time.substring(0, 5)} WIB
                           </div>
                         </div>
                         <div>
-                          {booking.status === "Upcoming" && (
-                            <span className="text-xs font-bold text-blue-400 bg-blue-500/10 px-3 py-1 rounded">
-                              MENDATANG
-                            </span>
-                          )}
-                          {booking.status === "Completed" && (
-                            <span className="text-xs font-bold text-green-400 bg-green-500/10 px-3 py-1 rounded">
-                              SELESAI
-                            </span>
-                          )}
-                          {booking.status === "Cancelled" && (
-                            <span className="text-xs font-bold text-red-400 bg-red-500/10 px-3 py-1 rounded border border-red-500/20">
-                              DIBATALKAN
-                            </span>
-                          )}
-                          {booking.status === "No-Show" && (
-                            <span className="text-xs font-bold text-red-400 bg-red-500/10 px-3 py-1 rounded border border-red-500/20">
-                              TIDAK HADIR
-                            </span>
-                          )}
+                          {booking.status === "Upcoming" && <span className="text-xs font-bold text-blue-400 bg-blue-500/10 px-3 py-1 rounded">UPCOMING</span>}
+                          {booking.status === "Completed" && <span className="text-xs font-bold text-green-400 bg-green-500/10 px-3 py-1 rounded">COMPLETED</span>}
+                          {booking.status === "Cancelled" && <span className="text-xs font-bold text-red-400 bg-red-500/10 px-3 py-1 rounded border border-red-500/20">CANCELLED</span>}
+                          {booking.status === "No-Show" && <span className="text-xs font-bold text-yellow-500 bg-yellow-500/10 px-3 py-1 rounded border border-yellow-500/20">NO-SHOW PENALTY</span>}
                         </div>
                       </div>
-
                       {booking.status === "Upcoming" && (
                         <div className="mt-4 pt-4 border-t border-barber-muted/10 flex justify-end">
-                          <button
-                            onClick={() =>
-                              handleCancelBooking(
-                                booking.id,
-                                booking.booking_date,
-                                booking.start_time,
-                              )
-                            }
-                            className="text-sm font-semibold text-red-400 hover:text-red-300 transition-colors"
-                          >
-                            Batalkan Booking
+                          <button onClick={() => handleCancelBooking(booking.id, booking.booking_date, booking.start_time)} className="text-sm font-semibold text-red-400 hover:text-red-300 transition-colors">
+                            Cancel Booking
                           </button>
                         </div>
                       )}
-
                       {booking.status === "Cancelled" && (
                         <div className="mt-4 bg-red-950/30 border border-red-500/20 rounded-lg p-3 flex items-start gap-3">
-                          <AlertTriangle
-                            size={16}
-                            className="text-red-400 mt-0.5 flex-shrink-0"
-                          />
-                          <p className="text-xs text-red-400 font-medium leading-relaxed">
-                            Penalti: Pembatalan Booking (Kredit Kursi -1)
-                          </p>
+                          <AlertTriangle size={16} className="text-red-400 mt-0.5 flex-shrink-0" />
+                          <p className="text-xs text-red-400 font-medium leading-relaxed">Penalty: Cancellation (Credit -1)</p>
                         </div>
                       )}
-
                       {booking.status === "No-Show" && (
                         <div className="mt-4 bg-red-950/30 border border-red-500/20 rounded-lg p-3 flex items-start gap-3">
-                          <AlertTriangle
-                            size={16}
-                            className="text-red-400 mt-0.5 flex-shrink-0"
-                          />
-                          <p className="text-xs text-red-400 font-medium leading-relaxed">
-                            Penalti: Tidak hadir pada jadwal (Kredit Kursi -1)
-                          </p>
+                          <AlertTriangle size={16} className="text-red-400 mt-0.5 flex-shrink-0" />
+                          <p className="text-xs text-red-400 font-medium leading-relaxed">Penalty: Missed Appointment (Credit -1)</p>
                         </div>
                       )}
                     </div>
@@ -608,210 +457,68 @@ export default function CustomerDashboard() {
           </div>
         )}
 
-        {/* TAB 3: PROFILE VIP DESIGN */}
+        {/* VIEW 3: PROFILE */}
         {activeTab === "profile" && (
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 max-w-3xl mx-auto">
             <div className="bg-barber-surface border border-barber-muted/20 rounded-3xl overflow-hidden shadow-2xl relative">
-              {/* Header Background (Aesthetic Cover) */}
               <div className="h-32 bg-gradient-to-r from-barber-bg via-barber-surface to-barber-accent/20 border-b border-barber-muted/20 relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-barber-accent/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
               </div>
-
               <div className="px-8 pb-8 relative">
-                {/* Avatar & Action Button */}
                 <div className="flex justify-between items-end -mt-12 mb-8">
                   <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-barber-accent to-yellow-600 p-1 shadow-xl">
                     <div className="w-full h-full bg-barber-surface rounded-xl flex items-center justify-center text-3xl font-bold font-serif text-barber-text">
                       {getInitials(profileData.fullName || user?.name)}
                     </div>
                   </div>
-                  <button
-                    onClick={() => setIsEditingProfile(!isEditingProfile)}
-                    className="bg-barber-bg border border-barber-muted/30 hover:border-barber-accent text-barber-text px-5 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2 shadow-sm active:scale-95"
-                  >
-                    {isEditingProfile ? (
-                      <>
-                        <X size={16} className="text-red-400" /> Batal
-                      </>
-                    ) : (
-                      <>
-                        <Edit size={16} className="text-barber-accent" /> Edit
-                        Profil
-                      </>
-                    )}
+                  <button onClick={() => setIsEditingProfile(!isEditingProfile)} className="bg-barber-bg border border-barber-muted/30 hover:border-barber-accent text-barber-text px-5 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2 shadow-sm">
+                    {isEditingProfile ? <><X size={16} className="text-red-400" /> Cancel</> : <><Edit size={16} className="text-barber-accent" /> Edit Profile</>}
                   </button>
                 </div>
 
                 {isEditingProfile ? (
-                  /* EDIT FORM MODE */
-                  <form
-                    onSubmit={handleProfileUpdate}
-                    className="space-y-5 animate-in fade-in duration-300 bg-barber-bg/50 p-6 rounded-2xl border border-barber-muted/10"
-                  >
+                  <form onSubmit={handleProfileUpdate} className="space-y-5 animate-in fade-in bg-barber-bg/50 p-6 rounded-2xl border border-barber-muted/10">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                       <div>
-                        <label className="block text-xs font-bold text-barber-muted uppercase mb-2 tracking-wider ml-1">
-                          Nama Lengkap
-                        </label>
+                        <label className="block text-xs font-bold text-barber-muted uppercase mb-2 tracking-wider ml-1">Full Name</label>
                         <div className="relative">
-                          <User
-                            size={18}
-                            className="absolute left-4 top-1/2 -translate-y-1/2 text-barber-muted"
-                          />
-                          <input
-                            type="text"
-                            value={profileData.fullName}
-                            onChange={(e) =>
-                              setProfileData({
-                                ...profileData,
-                                fullName: e.target.value,
-                              })
-                            }
-                            className="w-full pl-11 pr-4 py-3.5 rounded-xl bg-barber-surface border border-barber-muted/30 text-barber-text focus:border-barber-accent focus:outline-none font-semibold transition-colors"
-                            required
-                          />
+                          <User size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-barber-muted" />
+                          <input type="text" value={profileData.fullName} onChange={(e) => setProfileData({ ...profileData, fullName: e.target.value })} className="w-full pl-11 pr-4 py-3.5 rounded-xl bg-barber-surface border border-barber-muted/30 text-barber-text focus:border-barber-accent focus:outline-none font-semibold transition-colors" required />
                         </div>
                       </div>
                       <div>
-                        <label className="block text-xs font-bold text-barber-muted uppercase mb-2 tracking-wider ml-1">
-                          Nomor WhatsApp
-                        </label>
+                        <label className="block text-xs font-bold text-barber-muted uppercase mb-2 tracking-wider ml-1">WhatsApp Number</label>
                         <div className="relative">
-                          <Phone
-                            size={18}
-                            className="absolute left-4 top-1/2 -translate-y-1/2 text-barber-muted"
-                          />
-                          <input
-                            type="text"
-                            value={profileData.whatsapp}
-                            onChange={(e) =>
-                              setProfileData({
-                                ...profileData,
-                                whatsapp: e.target.value,
-                              })
-                            }
-                            className="w-full pl-11 pr-4 py-3.5 rounded-xl bg-barber-surface border border-barber-muted/30 text-barber-text focus:border-barber-accent focus:outline-none font-semibold transition-colors"
-                            required
-                          />
+                          <Phone size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-barber-muted" />
+                          <input type="text" value={profileData.whatsapp} onChange={(e) => setProfileData({ ...profileData, whatsapp: e.target.value })} className="w-full pl-11 pr-4 py-3.5 rounded-xl bg-barber-surface border border-barber-muted/30 text-barber-text focus:border-barber-accent focus:outline-none font-semibold transition-colors" required />
                         </div>
                       </div>
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-barber-muted/50 uppercase mb-2 tracking-wider ml-1">
-                        Email (Akun Permanen)
-                      </label>
+                      <label className="block text-xs font-bold text-barber-muted/50 uppercase mb-2 tracking-wider ml-1">Email (Permanent)</label>
                       <div className="relative">
-                        <Mail
-                          size={18}
-                          className="absolute left-4 top-1/2 -translate-y-1/2 text-barber-muted/50"
-                        />
-                        <input
-                          type="email"
-                          value={profileData.email}
-                          disabled
-                          className="w-full pl-11 pr-4 py-3.5 rounded-xl bg-barber-bg border border-barber-muted/10 text-barber-muted cursor-not-allowed font-semibold opacity-70"
-                        />
+                        <Mail size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-barber-muted/50" />
+                        <input type="email" value={profileData.email} disabled className="w-full pl-11 pr-4 py-3.5 rounded-xl bg-barber-bg border border-barber-muted/10 text-barber-muted cursor-not-allowed font-semibold opacity-70" />
                       </div>
                     </div>
-
-                    <button
-                      type="submit"
-                      className="w-full bg-barber-accent text-barber-bg py-4 rounded-xl font-bold hover:bg-opacity-90 transition-all flex items-center justify-center gap-2 mt-6 shadow-lg shadow-barber-accent/20"
-                    >
-                      <Save size={20} /> Simpan Perubahan Profil
+                    <button type="submit" className="w-full bg-barber-accent text-barber-bg py-4 rounded-xl font-bold hover:bg-opacity-90 transition-all flex items-center justify-center gap-2 mt-6">
+                      <Save size={20} /> Save Changes
                     </button>
                   </form>
                 ) : (
-                  /* VIEW MODE */
-                  <div className="animate-in fade-in duration-300 space-y-8">
-                    {/* User Identity */}
+                  <div className="animate-in fade-in space-y-8">
                     <div>
-                      <h3 className="text-3xl font-bold font-serif text-barber-text">
-                        {profileData.fullName}
-                      </h3>
-                      <p className="text-barber-accent font-semibold text-sm flex items-center gap-1.5 mt-1">
-                        <ShieldCheck size={16} /> Customer Terverifikasi
-                      </p>
+                      <h3 className="text-3xl font-bold font-serif text-barber-text">{profileData.fullName}</h3>
+                      <p className="text-barber-accent font-semibold text-sm flex items-center gap-1.5 mt-1"><ShieldCheck size={16} /> Verified Customer</p>
                     </div>
-
-                    {/* Contact Grid */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="bg-barber-bg border border-barber-muted/10 rounded-2xl p-5 flex items-center gap-5 hover:border-barber-muted/30 transition-colors">
-                        <div className="bg-barber-surface p-3.5 rounded-xl text-barber-muted shadow-sm">
-                          <Phone size={20} />
-                        </div>
-                        <div>
-                          <p className="text-xs font-bold text-barber-muted uppercase tracking-wider mb-0.5">
-                            Nomor WhatsApp
-                          </p>
-                          <p className="text-lg font-semibold text-barber-text">
-                            {profileData.whatsapp}
-                          </p>
-                        </div>
+                      <div className="bg-barber-bg border border-barber-muted/10 rounded-2xl p-5 flex items-center gap-5">
+                        <div className="bg-barber-surface p-3.5 rounded-xl text-barber-muted"><Phone size={20} /></div>
+                        <div><p className="text-xs font-bold text-barber-muted uppercase tracking-wider mb-0.5">WhatsApp</p><p className="text-lg font-semibold text-barber-text">{profileData.whatsapp}</p></div>
                       </div>
-                      <div className="bg-barber-bg border border-barber-muted/10 rounded-2xl p-5 flex items-center gap-5 hover:border-barber-muted/30 transition-colors">
-                        <div className="bg-barber-surface p-3.5 rounded-xl text-barber-muted shadow-sm">
-                          <Mail size={20} />
-                        </div>
-                        <div>
-                          <p className="text-xs font-bold text-barber-muted uppercase tracking-wider mb-0.5">
-                            Alamat Email
-                          </p>
-                          <p
-                            className="text-lg font-semibold text-barber-text truncate max-w-[200px]"
-                            title={profileData.email}
-                          >
-                            {profileData.email}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Life/Status VIP Card */}
-                    <div
-                      className={`border rounded-2xl p-6 flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden ${profileData.isBlocked ? "bg-red-950/20 border-red-500/30" : "bg-gradient-to-r from-barber-bg to-barber-surface border-barber-muted/20"}`}
-                    >
-                      {/* Decorative Background Icon */}
-                      <AlertTriangle
-                        size={120}
-                        className={`absolute -right-10 -bottom-10 opacity-5 ${profileData.isBlocked ? "text-red-500" : "text-barber-accent"}`}
-                      />
-
-                      <div className="flex items-center gap-5 z-10">
-                        <div
-                          className={`p-4 rounded-full border ${profileData.isBlocked ? "bg-red-500/10 border-red-500/20 text-red-500" : "bg-barber-surface border-barber-muted/20 text-barber-accent"}`}
-                        >
-                          <AlertTriangle size={28} />
-                        </div>
-                        <div>
-                          <h4 className="font-bold text-barber-text text-lg mb-1">
-                            Status Keanggotaan
-                          </h4>
-                          <p className="text-sm text-barber-muted font-medium">
-                            {profileData.isBlocked
-                              ? "Akun Anda dibekukan sementara. Silakan hubungi Admin."
-                              : "Jaga kredit Anda agar tetap bisa melakukan reservasi."}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="z-10 flex flex-col items-center md:items-end w-full md:w-auto bg-barber-surface/50 p-4 rounded-xl border border-barber-muted/10">
-                        <span className="text-xs font-bold text-barber-muted uppercase tracking-wider mb-2">
-                          Sisa Kredit Kursi
-                        </span>
-                        <div className="flex gap-2">
-                          {[1, 2, 3].map((life) => (
-                            <div
-                              key={life}
-                              className={`w-10 h-2.5 rounded-full transition-all duration-500 ${life <= currentLifeCount ? "bg-barber-accent shadow-[0_0_12px_rgba(212,175,55,0.4)]" : "bg-barber-bg border border-barber-muted/20"}`}
-                            ></div>
-                          ))}
-                        </div>
-                        <span
-                          className={`text-sm font-bold mt-2 ${profileData.isBlocked ? "text-red-500" : "text-barber-text"}`}
-                        >
-                          {currentLifeCount} / 3 Tersisa
-                        </span>
+                      <div className="bg-barber-bg border border-barber-muted/10 rounded-2xl p-5 flex items-center gap-5">
+                        <div className="bg-barber-surface p-3.5 rounded-xl text-barber-muted"><Mail size={20} /></div>
+                        <div><p className="text-xs font-bold text-barber-muted uppercase tracking-wider mb-0.5">Email</p><p className="text-lg font-semibold text-barber-text truncate max-w-[200px]" title={profileData.email}>{profileData.email}</p></div>
                       </div>
                     </div>
                   </div>
@@ -822,85 +529,48 @@ export default function CustomerDashboard() {
         )}
       </div>
 
-      {/* --- MODAL 1: BOOKING CREATION --- */}
+      {/* --- MODAL 1: BOOKING POPUP --- */}
       {isBookingModalOpen && selectedBarber && (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-end sm:items-center justify-center sm:p-4 backdrop-blur-sm">
           <div className="bg-barber-surface w-full sm:max-w-md sm:rounded-2xl rounded-t-3xl overflow-hidden shadow-2xl animate-in slide-in-from-bottom-10 sm:slide-in-from-bottom-0">
-            <div className="p-6 border-b border-barber-muted/20 flex justify-between items-start relative">
+            <div className="p-6 border-b border-barber-muted/20 flex justify-between items-start">
               <div className="flex gap-4 items-center">
-                <img
-                  src={selectedBarber.image}
-                  alt={selectedBarber.name}
-                  className="w-12 h-12 rounded-full object-cover border border-barber-accent"
-                />
+                <img src={selectedBarber.image} alt={selectedBarber.name} className="w-12 h-12 rounded-full object-cover border border-barber-accent" />
                 <div>
-                  <h3 className="text-xl font-bold font-serif text-barber-text">
-                    {selectedBarber.name}
-                  </h3>
-                  <p className="text-sm text-barber-accent font-semibold">
-                    {selectedBarber.specialty
-                      ? selectedBarber.specialty.split("•")[0].trim()
-                      : ""}
-                  </p>
+                  <h3 className="text-xl font-bold font-serif text-barber-text">{selectedBarber.name}</h3>
+                  <p className="text-sm text-barber-accent font-semibold">{selectedBarber.specialty ? selectedBarber.specialty.split("•")[0].trim() : ""}</p>
                 </div>
               </div>
-              <button
-                onClick={() => setIsBookingModalOpen(false)}
-                className="text-barber-muted hover:text-red-400 p-1 bg-barber-bg rounded-full transition-colors"
-              >
-                <X size={20} />
-              </button>
+              <button onClick={() => setIsBookingModalOpen(false)} className="text-barber-muted hover:text-red-400 p-1 bg-barber-bg rounded-full"><X size={20} /></button>
             </div>
 
             <div className="p-6">
               {!selectedTimeForConfirm ? (
                 <>
                   <div className="mb-8">
-                    <h4 className="text-sm font-bold text-barber-text uppercase tracking-wider mb-4">
-                      Pilih Tanggal
-                    </h4>
-                    <div className="flex gap-3 overflow-x-auto pb-2 snap-x [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+                    <h4 className="text-sm font-bold text-barber-text uppercase tracking-wider mb-4">Select Date</h4>
+                    <div className="flex gap-3 overflow-x-auto pb-2 snap-x [&::-webkit-scrollbar]:hidden">
                       {calendarDays.map((dateObj, idx) => {
                         const dateStr = formatDateForAPI(dateObj);
                         const isSelected = selectedDate === dateStr;
                         return (
-                          <button
-                            key={idx}
-                            onClick={() => handleDateSelect(dateObj)}
-                            className={`flex flex-col items-center min-w-[4.5rem] py-3 rounded-xl border snap-start transition-all ${isSelected ? "bg-barber-accent border-barber-accent text-barber-bg shadow-md scale-105" : "bg-barber-bg border-barber-muted/20 text-barber-text hover:border-barber-accent/50"}`}
-                          >
-                            <span
-                              className={`text-xs font-semibold mb-1 ${isSelected ? "text-barber-bg/80" : "text-barber-muted"}`}
-                            >
-                              {idx === 0 ? "Hari Ini" : getDayName(dateObj)}
-                            </span>
-                            <span className="text-xl font-bold">
-                              {getDayNumber(dateObj)}
-                            </span>
+                          <button key={idx} onClick={() => handleDateSelect(dateObj)} className={`flex flex-col items-center min-w-[4.5rem] py-3 rounded-xl border snap-start transition-all ${isSelected ? "bg-barber-accent border-barber-accent text-barber-bg shadow-md" : "bg-barber-bg border-barber-muted/20 text-barber-text"}`}>
+                            <span className="text-xs font-semibold mb-1">{idx === 0 ? "Today" : getDayName(dateObj)}</span>
+                            <span className="text-xl font-bold">{getDayNumber(dateObj)}</span>
                           </button>
                         );
                       })}
                     </div>
                   </div>
-                  <h4 className="text-sm font-bold text-barber-text uppercase tracking-wider mb-4">
-                    Slot Tersedia
-                  </h4>
+                  <h4 className="text-sm font-bold text-barber-text uppercase tracking-wider mb-4">Available Slots</h4>
                   {isLoadingSlots ? (
-                    <div className="py-8 text-center text-barber-accent animate-pulse font-semibold">
-                      Mencari jadwal kosong...
-                    </div>
+                    <div className="py-8 text-center text-barber-accent animate-pulse font-semibold">Searching schedule...</div>
                   ) : availableSlots.length === 0 ? (
-                    <div className="py-8 text-center text-red-400 font-semibold bg-red-500/10 rounded-xl border border-red-500/20">
-                      Maaf, jadwal penuh pada tanggal ini.
-                    </div>
+                    <div className="py-8 text-center text-red-400 font-semibold bg-red-500/10 rounded-xl border border-red-500/20">Fully booked for this date.</div>
                   ) : (
-                    <div className="grid grid-cols-3 gap-3 max-h-60 overflow-y-auto pr-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+                    <div className="grid grid-cols-3 gap-3 max-h-60 overflow-y-auto pr-1">
                       {availableSlots.map((timeStr) => (
-                        <button
-                          key={timeStr}
-                          onClick={() => handleTimeClick(timeStr)}
-                          className="py-3 px-2 text-center rounded-xl font-bold border border-barber-muted/30 bg-barber-bg text-barber-text hover:border-barber-accent hover:text-barber-accent transition-all active:scale-95"
-                        >
+                        <button key={timeStr} onClick={() => handleTimeClick(timeStr)} className="py-3 px-2 text-center rounded-xl font-bold border border-barber-muted/30 bg-barber-bg text-barber-text hover:border-barber-accent hover:text-barber-accent transition-all">
                           {timeStr.substring(0, 5)}
                         </button>
                       ))}
@@ -910,58 +580,17 @@ export default function CustomerDashboard() {
               ) : (
                 <div className="animate-in fade-in zoom-in duration-200">
                   <div className="bg-barber-bg rounded-xl border border-barber-muted/20 p-6 mb-6">
-                    <h4 className="text-center font-bold text-barber-text mb-4 uppercase tracking-wider text-sm border-b border-barber-muted/20 pb-4">
-                      Ringkasan Booking
-                    </h4>
+                    <h4 className="text-center font-bold text-barber-text mb-4 uppercase tracking-wider text-sm border-b border-barber-muted/20 pb-4">Booking Summary</h4>
                     <div className="space-y-4">
-                      <div className="flex justify-between items-center">
-                        <span className="text-barber-muted text-sm">
-                          Barber
-                        </span>
-                        <span className="font-bold text-barber-text">
-                          {selectedBarber.name}
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-barber-muted text-sm">
-                          Tanggal
-                        </span>
-                        <span className="font-bold text-barber-text">
-                          {new Date(selectedDate).toLocaleDateString("id-ID", {
-                            weekday: "long",
-                            day: "numeric",
-                            month: "long",
-                          })}
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-barber-muted text-sm">Jam</span>
-                        <span className="font-bold text-barber-text text-lg text-barber-accent">
-                          {selectedTimeForConfirm.substring(0, 5)} WIB
-                        </span>
-                      </div>
+                      <div className="flex justify-between items-center"><span className="text-barber-muted text-sm">Barber</span><span className="font-bold text-barber-text">{selectedBarber.name}</span></div>
+                      <div className="flex justify-between items-center"><span className="text-barber-muted text-sm">Date</span><span className="font-bold text-barber-text">{new Date(selectedDate).toLocaleDateString("en-US", { weekday: "long", day: "numeric", month: "short" })}</span></div>
+                      <div className="flex justify-between items-center"><span className="text-barber-muted text-sm">Time</span><span className="font-bold text-barber-text text-lg text-barber-accent">{selectedTimeForConfirm.substring(0, 5)} WIB</span></div>
                     </div>
                   </div>
                   <div className="flex gap-3">
-                    <button
-                      onClick={() => setSelectedTimeForConfirm(null)}
-                      disabled={isSubmitting}
-                      className="flex-1 py-3.5 rounded-xl font-semibold text-barber-text bg-barber-bg border border-barber-muted/30 hover:bg-barber-surface transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                    >
-                      <ArrowLeft size={18} /> Kembali
-                    </button>
-                    <button
-                      onClick={executeBooking}
-                      disabled={isSubmitting}
-                      className="flex-[2] py-3.5 rounded-xl font-bold text-barber-bg bg-barber-accent hover:bg-opacity-90 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
-                    >
-                      {isSubmitting ? (
-                        "Memproses..."
-                      ) : (
-                        <>
-                          <CheckCircle2 size={18} /> Konfirmasi
-                        </>
-                      )}
+                    <button onClick={() => setSelectedTimeForConfirm(null)} disabled={isSubmitting} className="flex-1 py-3.5 rounded-xl font-semibold text-barber-text bg-barber-bg border border-barber-muted/30 hover:bg-barber-surface flex items-center justify-center gap-2"><ArrowLeft size={18} /> Back</button>
+                    <button onClick={executeBooking} disabled={isSubmitting} className="flex-[2] py-3.5 rounded-xl font-bold text-barber-bg bg-barber-accent hover:bg-opacity-90 flex items-center justify-center gap-2">
+                      {isSubmitting ? "Processing..." : <><CheckCircle2 size={18} /> Confirm</>}
                     </button>
                   </div>
                 </div>
@@ -971,56 +600,57 @@ export default function CustomerDashboard() {
         </div>
       )}
 
-      {/* --- MODAL 2: CUSTOM CANCELLATION WARNING --- */}
+      {/* --- MODAL 2: CANCEL WARNING --- */}
       {cancelData.isOpen && (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-          <div className="bg-barber-surface border border-barber-muted/20 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl animate-in zoom-in duration-200">
-            <div className="p-6">
-              <div className="flex items-center gap-3 mb-4">
-                {cancelData.isPenalty ? (
-                  <div className="bg-red-500/10 p-3 rounded-full text-red-500">
-                    <AlertTriangle size={24} />
-                  </div>
-                ) : (
-                  <div className="bg-blue-500/10 p-3 rounded-full text-blue-400">
-                    <CheckCircle2 size={24} />
-                  </div>
-                )}
-                <h3 className="text-xl font-bold font-serif text-barber-text">
-                  {cancelData.isPenalty
-                    ? "Konfirmasi Penalti"
-                    : "Konfirmasi Pembatalan"}
-                </h3>
+          <div className="bg-barber-surface border border-barber-muted/20 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className={`p-3 rounded-full ${cancelData.isPenalty ? "bg-red-500/10 text-red-500" : "bg-blue-500/10 text-blue-400"}`}>
+                {cancelData.isPenalty ? <AlertTriangle size={24} /> : <CheckCircle2 size={24} />}
               </div>
-
-              <p className="text-barber-text/80 text-sm leading-relaxed mb-8">
-                {cancelData.message}
-              </p>
-
-              <div className="flex gap-3 justify-end">
-                <button
-                  onClick={() =>
-                    setCancelData({ ...cancelData, isOpen: false })
-                  }
-                  className="px-5 py-2.5 rounded-xl font-semibold text-barber-text hover:bg-barber-muted/10 transition-colors"
-                >
-                  Kembali
-                </button>
-                <button
-                  onClick={executeCancellation}
-                  className={`px-5 py-2.5 rounded-xl font-bold text-barber-bg transition-all active:scale-95 ${
-                    cancelData.isPenalty
-                      ? "bg-red-500 hover:bg-red-400"
-                      : "bg-barber-accent hover:bg-opacity-90"
-                  }`}
-                >
-                  Ya, Batalkan
-                </button>
-              </div>
+              <h3 className="text-xl font-bold font-serif text-barber-text">{cancelData.isPenalty ? "Penalty Warning" : "Free Cancellation"}</h3>
+            </div>
+            <p className="text-barber-muted text-sm leading-relaxed mb-8">{cancelData.message}</p>
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setCancelData({ ...cancelData, isOpen: false })} className="px-5 py-2.5 rounded-xl font-semibold text-barber-text hover:bg-barber-muted/10 transition-colors">Go Back</button>
+              <button onClick={executeCancellation} className={`px-5 py-2.5 rounded-xl font-bold text-barber-bg transition-all ${cancelData.isPenalty ? "bg-red-500 hover:bg-red-400" : "bg-barber-accent hover:bg-opacity-90"}`}>Yes, Cancel It</button>
             </div>
           </div>
         </div>
       )}
+
+      {/* --- MODAL 3: LOGOUT CONFIRMATION --- */}
+      {isLogoutModalOpen && (
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-barber-surface border border-barber-muted/20 rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl animate-in zoom-in duration-200 p-6 text-center">
+            <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 bg-red-500/10 text-red-400">
+              <LogOut size={32} />
+            </div>
+            <h3 className="text-xl font-bold font-serif text-barber-text mb-2">Sign Out</h3>
+            <p className="text-barber-muted text-sm leading-relaxed mb-8">Are you sure you want to sign out of BarberHub?</p>
+            <div className="flex gap-3">
+              <button onClick={() => setIsLogoutModalOpen(false)} className="flex-1 py-3 rounded-xl font-bold text-barber-text bg-barber-bg hover:bg-barber-muted/10 transition-colors border border-barber-muted/20">Cancel</button>
+              <button onClick={confirmLogout} className="flex-1 py-3 rounded-xl font-bold text-barber-bg bg-red-500 hover:bg-red-400 transition-all">Yes, Sign Out</button>
+            </div>
+          </div>
+        </div>
+      )}
+    {/* --- MOBILE BOTTOM NAV --- */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-barber-surface border-t border-barber-muted/20 flex justify-around items-center px-4 py-3 shadow-xl">
+        <button onClick={() => setActiveTab("home")} className={`flex flex-col items-center gap-1 text-xs font-bold transition-colors ${activeTab === "home" ? "text-barber-accent" : "text-barber-muted"}`}>
+          <CalendarCheck size={22} />
+          <span>Home</span>
+        </button>
+        <button onClick={() => setActiveTab("history")} className={`flex flex-col items-center gap-1 text-xs font-bold transition-colors ${activeTab === "history" ? "text-barber-accent" : "text-barber-muted"}`}>
+          <Clock size={22} />
+          <span>History</span>
+        </button>
+        <button onClick={() => setActiveTab("profile")} className={`flex flex-col items-center gap-1 text-xs font-bold transition-colors ${activeTab === "profile" ? "text-barber-accent" : "text-barber-muted"}`}>
+          <User size={22} />
+          <span>Profile</span>
+        </button>
+        
+      </div>
     </div>
   );
 }
