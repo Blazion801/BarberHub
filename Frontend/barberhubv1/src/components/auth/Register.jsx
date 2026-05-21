@@ -9,7 +9,7 @@ export default function Register() {
   const [formData, setFormData] = useState({
     fullName: '', whatsapp: '', email: '', password: '', confirmPassword: ''
   });
-  const [error, setError] = useState('');
+  const [error, setError] = '';
   
   // UX FIX: Added state to toggle password visibility
   const [showPassword, setShowPassword] = useState(false);
@@ -27,15 +27,15 @@ export default function Register() {
     setError('');
 
     if (formData.whatsapp.length < 10) { 
-      setError('Nomor WhatsApp minimal 10 angka.'); 
+      setError('WhatsApp number must be at least 10 digits.'); 
       return; 
     }
     if (formData.password.length < 8) { 
-      setError('Password minimal 8 karakter.'); 
+      setError('Password must be at least 8 characters.'); 
       return; 
     }
     if (formData.password !== formData.confirmPassword) { 
-      setError('Konfirmasi password tidak cocok.'); 
+      setError('Passwords do not match.'); 
       return; 
     }
 
@@ -48,7 +48,7 @@ export default function Register() {
       });
 
       if (response.status === 201) {
-        toast.success('Akun berhasil dibuat! Silakan masuk.');
+        toast.success('Account created successfully! Please sign in.');
         
         setTimeout(() => {
           navigate('/login');
@@ -56,8 +56,8 @@ export default function Register() {
       }
     } catch (err) {
       console.error('Registration API Error:', err);
-      toast.error(err.response?.data?.message || 'Gagal terhubung ke server backend.');
-      setError(err.response?.data?.message || 'Gagal terhubung ke server backend.');
+      toast.error(err.response?.data?.message || 'Failed to connect to the backend server.');
+      setError(err.response?.data?.message || 'Failed to connect to the backend server.');
     }
   };
 
@@ -71,7 +71,7 @@ export default function Register() {
             BarberHub
           </h1>
           <p className="text-barber-text/80 text-sm">
-            Mulai Perjalanan Gaya Anda
+            Start Your Style Journey
           </p>
         </div>
 
@@ -85,7 +85,7 @@ export default function Register() {
         <form id="register-form" onSubmit={handleSubmit} className="space-y-5">
           
           <div>
-            <label className="block text-xs font-semibold text-barber-text uppercase mb-2 tracking-wider">Nama Lengkap</label>
+            <label className="block text-xs font-semibold text-barber-text uppercase mb-2 tracking-wider">Full Name</label>
             <input
               type="text" name="fullName" value={formData.fullName} onChange={handleChange} placeholder="John Doe" required
               className="w-full px-4 py-4 rounded-lg bg-barber-surface text-barber-text placeholder-barber-muted border border-barber-muted/30 focus:border-barber-accent focus:outline-none focus:ring-1 focus:ring-barber-accent transition-all"
@@ -93,7 +93,7 @@ export default function Register() {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-barber-text uppercase mb-2 tracking-wider">Nomor WhatsApp</label>
+            <label className="block text-xs font-semibold text-barber-text uppercase mb-2 tracking-wider">WhatsApp Number</label>
             <input
               type="tel" name="whatsapp" value={formData.whatsapp} onChange={handleChange} placeholder="081234567890" required
               className="w-full px-4 py-4 rounded-lg bg-barber-surface text-barber-text placeholder-barber-muted border border-barber-muted/30 focus:border-barber-accent focus:outline-none focus:ring-1 focus:ring-barber-accent transition-all"
@@ -103,7 +103,7 @@ export default function Register() {
           <div>
             <label className="block text-xs font-semibold text-barber-text uppercase mb-2 tracking-wider">Email</label>
             <input
-              type="email" name="email" value={formData.email} onChange={handleChange} placeholder="nama@email.com" required
+              type="email" name="email" value={formData.email} onChange={handleChange} placeholder="name@email.com" required
               className="w-full px-4 py-4 rounded-lg bg-barber-surface text-barber-text placeholder-barber-muted border border-barber-muted/30 focus:border-barber-accent focus:outline-none focus:ring-1 focus:ring-barber-accent transition-all"
             />
           </div>
@@ -129,7 +129,7 @@ export default function Register() {
 
           {/* Confirm Password Field with Eye Icon */}
           <div>
-            <label className="block text-xs font-semibold text-barber-text uppercase mb-2 tracking-wider">Konfirmasi Password</label>
+            <label className="block text-xs font-semibold text-barber-text uppercase mb-2 tracking-wider">Confirm Password</label>
             <div className="relative">
               <input
                 type={showConfirmPassword ? "text" : "password"} 
@@ -151,15 +151,15 @@ export default function Register() {
               type="submit"
               className="w-full bg-barber-accent text-barber-bg py-4 rounded-lg font-bold text-base hover:bg-opacity-90 transition-all active:scale-[0.98]"
             >
-              Daftar Sekarang
+              Sign Up
             </button>
           </div>
         </form>
 
         <div className="mt-10 text-center text-sm text-barber-text/70">
-          Sudah punya akun?{' '}
+          Already have an account?{' '}
           <Link to="/login" className="text-barber-accent font-semibold hover:underline">
-            Masuk
+            Sign In
           </Link>
         </div>
         
