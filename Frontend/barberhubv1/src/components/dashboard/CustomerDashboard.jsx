@@ -288,7 +288,7 @@ export default function CustomerDashboard() {
       </nav>
 
       {/* --- MAIN CONTENT AREA --- */}
-      <div className="max-w-6xl mx-auto px-6 mt-8 pb-20">
+      <div className="max-w-6xl mx-auto px-6 mt-8 pb-28">
         
         {/* VIEW 1: HOME (BOOKING) */}
         {activeTab === "home" && (
@@ -672,6 +672,35 @@ export default function CustomerDashboard() {
           </div>
         </div>
       )}
+    {/* --- MOBILE BOTTOM NAV --- */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-barber-surface border-t border-barber-muted/20 flex justify-around items-center px-4 py-3 shadow-[0_-5px_20px_rgba(0,0,0,0.2)]">
+        <button 
+          onClick={() => setActiveTab("home")} 
+          className={`flex flex-col items-center gap-1 text-[10px] font-bold transition-colors ${activeTab === "home" ? "text-barber-accent scale-110" : "text-barber-muted"}`}
+        >
+          <CalendarCheck size={22} />
+          <span>Home</span>
+        </button>
+        
+        <button 
+          onClick={() => setActiveTab("history")} 
+          className={`flex flex-col items-center gap-1 text-[10px] font-bold transition-colors ${activeTab === "history" ? "text-barber-accent scale-110" : "text-barber-muted"}`}
+        >
+          <Clock size={22} />
+          <span>History</span>
+        </button>
+
+        <button 
+          onClick={() => setActiveTab("contact")} 
+          className={`flex flex-col items-center gap-1 text-[10px] font-bold transition-colors ${activeTab === "contact" ? "text-barber-accent scale-110" : "text-barber-muted"}`}
+        >
+          <MessageCircle size={22} />
+          <span>Contact</span>
+        </button>
+      </div>
+
+
+
     </div>
   );
 }
