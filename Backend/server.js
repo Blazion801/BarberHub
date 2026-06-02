@@ -7,7 +7,8 @@ const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
 const cron = require("node-cron"); // Pembetulan Eror 1: Require node-cron dipastikan ada!
-
+const nodemailer = require("nodemailer");
+const crypto = require("crypto"); // Built into Node.js, no install needed
 const db = require("./config/db");
 
 const app = express();
@@ -15,6 +16,16 @@ app.use(cors());
 app.use(express.json());
 
 // --- UPLOAD ENGINE SETUP ---
+const transporter = nodemailer.createTransport({
+  host: "smtp.ethereal.email",
+  port: 587,
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
+  },
+});
+
+
 const uploadDir = path.join(__dirname, "uploads");
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir);
@@ -39,14 +50,14 @@ const authenticateToken = (req, res, next) => {
   if (!token) {
     return res
       .status(401)
-      .json({ message: "Akses ditolak. Token tidak ditemukan." });
+      .json({ message: "Access denied. Token not found." });
   }
 
   jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
     if (err) {
       return res
         .status(403)
-        .json({ message: "Token tidak valid atau sudah kedaluwarsa." });
+        .json({ message: "Token is not valid or has expired." });
     }
     req.user = user; // Menyimpan data payload JWT (id, role, name) ke dalam request
     next();
@@ -58,7 +69,7 @@ const requireAdmin = (req, res, next) => {
   if (req.user.role !== "Admin") {
     return res
       .status(403)
-      .json({ message: "Akses ditolak. Hanya untuk Role Admin." });
+      .json({ message: "Access denied. Only for Admin role." });
   }
   next();
 };
@@ -76,13 +87,13 @@ app.post("/api/register", async (req, res) => {
     const { name, whatsapp, email, password } = req.body;
 
     if (!name || !whatsapp || !email || !password) {
-      return res.status(400).json({ message: "Semua data wajib diisi." });
+      return res.status(400).json({ message: "All fields are required." });
     }
 
     if (password.length < 8) {
       return res
         .status(400)
-        .json({ message: "Password minimal harus 8 karakter." });
+        .json({ message: "Password must be at least 8 characters long." });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -97,7 +108,7 @@ app.post("/api/register", async (req, res) => {
     console.error("Registration Error:", error);
     if (error.code === "ER_DUP_ENTRY") {
       return res.status(409).json({
-        message: "Email sudah terdaftar. Silakan gunakan email lain.",
+        message: "Email already registered. Please use a different email.",
       });
     }
     res.status(500).json({ message: "Server error during registration." });
@@ -111,7 +122,7 @@ app.post("/api/login", async (req, res) => {
     if (!email || !password) {
       return res
         .status(400)
-        .json({ message: "Email dan password wajib diisi." });
+        .json({ message: "Email and password are required." });
     }
 
     const [users] = await db.execute("SELECT * FROM users WHERE email = ?", [
@@ -120,7 +131,7 @@ app.post("/api/login", async (req, res) => {
     if (users.length === 0) {
       return res
         .status(404)
-        .json({ message: "Akun tidak ditemukan. Silakan daftar." });
+        .json({ message: "Account not found. Please register." });
     }
 
     const user = users[0];
@@ -160,7 +171,7 @@ app.post("/api/login", async (req, res) => {
     });
   } catch (error) {
     console.error("Login error:", error);
-    res.status(500).json({ message: "Server error saat login." });
+    res.status(500).json({ message: "Server error during login." });
   }
 });
 
@@ -174,7 +185,7 @@ app.get("/api/barbers", async (req, res) => {
         `);
     res.status(200).json(barbers);
   } catch (error) {
-    res.status(500).json({ message: "Gagal mengambil data barber." });
+    res.status(500).json({ message: "Failed to fetch barber data." });
   }
 });
 
@@ -183,16 +194,16 @@ app.post("/api/barbers", upload.single("image"), async (req, res) => {
   try {
     const { fullName, specialty, experienceYears, price } = req.body;
     if (!req.file)
-      return res.status(400).json({ message: "Foto wajib diupload." });
+      return res.status(400).json({ message: "Photo is required." });
     const photoUrl = `http://localhost:5000/uploads/${req.file.filename}`;
 
     await db.execute(
       "INSERT INTO barbers (full_name, specialty, experience_years, price, photo_url, status, overall_rating) VALUES (?, ?, ?, ?, ?, ?, ?)",
       [fullName, specialty, experienceYears, price, photoUrl, "Active", 5.0],
     );
-    res.status(201).json({ message: "Barber berhasil ditambahkan!" });
+    res.status(201).json({ message: "Barber successfully added!" });
   } catch (error) {
-    res.status(500).json({ message: "Gagal menambahkan barber." });
+    res.status(500).json({ message: "Failed to add barber." });
   }
 });
 
@@ -203,7 +214,7 @@ app.get("/api/availability", async (req, res) => {
     if (!barberId || !date)
       return res
         .status(400)
-        .json({ message: "Barber ID dan Tanggal wajib diisi." });
+        .json({ message: "Barber ID and Date are required." });
 
     const [existingSlots] = await db.execute(
       "SELECT start_time, status FROM time_slots WHERE barber_id = ? AND slot_date = ?",
@@ -250,6 +261,7 @@ app.get("/api/availability", async (req, res) => {
 });
 
 // 7. Create a New Booking (With Concurrency Lock & Life Count Validation)
+// 7. Create a New Booking (With Concurrency Lock, Life Count Validation & Email Notification)
 app.post("/api/bookings", authenticateToken, async (req, res) => {
   const connection = await db.getConnection();
   try {
@@ -261,26 +273,26 @@ app.post("/api/bookings", authenticateToken, async (req, res) => {
 
     await connection.beginTransaction();
 
+    // UPDATED: Now fetches email and full_name for the notification
     const [users] = await connection.execute(
-      "SELECT life_count, is_blocked FROM users WHERE id = ?",
+      "SELECT life_count, is_blocked, email, full_name FROM users WHERE id = ?",
       [customerId],
     );
+    
     if (users.length === 0) {
       await connection.rollback();
-      return res
-        .status(404)
-        .json({ message: "Data pengguna tidak ditemukan." });
+      return res.status(404).json({ message: "Data pengguna tidak ditemukan." });
     }
 
     const user = users[0];
     if (user.is_blocked === 1 || user.life_count <= 0) {
       await connection.rollback();
       return res.status(403).json({
-        message:
-          "Pemesanan ditolak. Akun Anda ditangguhkan karena kredit kursi habis (0 Nyawa).",
+        message: "Booking rejected. Your account has been suspended due to exhausted booking credits (0 Lives).",
       });
     }
 
+    // --- CONCURRENCY LOCK (FOR UPDATE) ---
     const [slots] = await connection.execute(
       "SELECT id, status FROM time_slots WHERE barber_id = ? AND slot_date = ? AND start_time = ? FOR UPDATE",
       [barberId, date, time],
@@ -288,16 +300,14 @@ app.post("/api/bookings", authenticateToken, async (req, res) => {
 
     if (slots.length === 0) {
       await connection.rollback();
-      return res
-        .status(404)
-        .json({ message: "Slot waktu tidak tersedia pada sistem." });
+      return res.status(404).json({ message: "Time slot not available in the system." });
     }
 
     const slot = slots[0];
     if (slot.status !== "Available") {
       await connection.rollback();
       return res.status(409).json({
-        message: "Maaf, slot waktu ini baru saja dipesan oleh pengguna lain.",
+        message: "Sorry, this time slot was just booked by another customer.",
       });
     }
 
@@ -314,18 +324,40 @@ app.post("/api/bookings", authenticateToken, async (req, res) => {
 
     await connection.commit();
     res.status(201).json({ message: "Booking berhasil dikonfirmasi!" });
+
+    // --- FIRE AND FORGET EMAIL NOTIFICATION ---
+    // Note: We don't await this so the user isn't kept waiting for the SMTP server to respond
+    transporter.sendMail({
+      from: `"BarberHub System" <${process.env.EMAIL_USER}>`,
+      to: user.email,
+      subject: "Booking Confirmed! - BarberHub",
+      html: `
+        <div style="font-family: Arial, sans-serif; color: #333;">
+          <h2 style="color: #d4af37;">Booking Berhasil, ${user.full_name}!</h2>
+          <p>Jadwal potong rambut Anda telah dikonfirmasi ke dalam sistem.</p>
+          <div style="background-color: #f3f4f6; padding: 15px; border-radius: 8px;">
+            <p style="margin: 5px 0;"><strong>Tanggal:</strong> ${date}</p>
+            <p style="margin: 5px 0;"><strong>Waktu:</strong> ${time} WIB</p>
+          </div>
+          <p style="color: #ef4444; font-size: 0.9em; margin-top: 20px;">
+            <em>*Penting: Mohon datang 10 menit lebih awal. Keterlambatan lebih dari 20 menit atau pembatalan mendadak akan mengurangi Booking Credit Anda.</em>
+          </p>
+        </div>
+      `
+    }).catch(err => console.error("Failed to send booking email:", err));
+
   } catch (error) {
     await connection.rollback();
     console.error("Booking Concurrency Error:", error);
     res.status(500).json({
-      message: "Gagal melakukan booking akibat gangguan konkurensi jaringan.",
+      message: "Failed to make booking due to network concurrency issues.",
     });
   } finally {
     connection.release();
   }
 });
 
-// 8. Get Customer Booking History
+// 8. Get Customer Booking History (UPDATED WITH REVIEWS)
 app.get("/api/bookings/customer/:customerId", async (req, res) => {
   try {
     const { customerId } = req.params;
@@ -337,10 +369,12 @@ app.get("/api/bookings/customer/:customerId", async (req, res) => {
                 ts.start_time, 
                 b.status, 
                 bar.full_name AS barber_name, 
-                bar.photo_url AS barber_image
+                bar.photo_url AS barber_image,
+                r.rating AS rating
             FROM bookings b
             JOIN time_slots ts ON b.time_slot_id = ts.id
             JOIN barbers bar ON ts.barber_id = bar.id   
+            LEFT JOIN reviews r ON b.id = r.booking_id
             WHERE b.customer_id = ?
             ORDER BY ts.slot_date DESC, ts.start_time DESC
         `,
@@ -348,7 +382,7 @@ app.get("/api/bookings/customer/:customerId", async (req, res) => {
     );
     res.status(200).json(history);
   } catch (error) {
-    res.status(500).json({ message: "Gagal memuat riwayat booking." });
+    res.status(500).json({ message: "Failed to load booking history." });
   }
 });
 
@@ -360,7 +394,7 @@ app.put("/api/bookings/cancel", authenticateToken, async (req, res) => {
     if (!bookingId || !customerId)
       return res
         .status(400)
-        .json({ message: "Booking ID dan Customer ID wajib diisi." });
+        .json({ message: "Booking ID and Customer ID are required." });
 
     await connection.beginTransaction();
 
@@ -377,7 +411,7 @@ app.put("/api/bookings/cancel", authenticateToken, async (req, res) => {
     if (bookings.length === 0) {
       await connection.rollback();
       return res.status(404).json({
-        message: "Booking tidak ditemukan atau tidak dapat dibatalkan.",
+        message: "Booking not found or cannot be cancelled.",
       });
     }
 
@@ -425,25 +459,25 @@ app.put("/api/bookings/cancel", authenticateToken, async (req, res) => {
         await connection.commit();
         return res.status(200).json({
           message:
-            "Booking dibatalkan. Penalti: Waktu < 3 Jam, Kredit Kursi 0/3. Akun Anda otomatis ditangguhkan.",
+            "Booking successfully cancelled. Penalty: Cancellation within 3 hours, Credit -1. Your account has been automatically suspended.",
         });
       }
 
       await connection.commit();
       return res.status(200).json({
         message:
-          "Booking dibatalkan. (Penalti: Waktu Pembatalan < 3 Jam, Kredit Kursi -1)",
+          "Booking successfully cancelled with penalty. (Penalty:Cancel in < 3 Jam, Credit -1)",
       });
     }
 
     await connection.commit();
     res
       .status(200)
-      .json({ message: "Booking berhasil dibatalkan tanpa penalti (Aman)." });
+      .json({ message: "Booking successfully cancelled without penalty (Safe)." });
   } catch (error) {
     await connection.rollback();
     console.error("Cancel Error:", error);
-    res.status(500).json({ message: "Gagal membatalkan booking." });
+    res.status(500).json({ message: "Failed to cancel booking." });
   } finally {
     connection.release();
   }
@@ -462,13 +496,13 @@ app.get("/api/users/:id", async (req, res) => {
     );
 
     if (users.length === 0) {
-      return res.status(404).json({ message: "User tidak ditemukan." });
+      return res.status(404).json({ message: "User not found." });
     }
 
     res.status(200).json(users[0]);
   } catch (error) {
     console.error("Get User Error:", error);
-    res.status(500).json({ message: "Gagal mengambil data user." });
+    res.status(500).json({ message: "Failed to fetch user data." });
   }
 });
 
@@ -494,11 +528,11 @@ app.get("/api/admin/bookings", async (req, res) => {
     res.status(200).json(bookings);
   } catch (error) {
     console.error("Admin Bookings Error:", error);
-    res.status(500).json({ message: "Gagal memuat jadwal harian." });
+    res.status(500).json({ message: "Failed to load daily schedule." });
   }
 });
 
-// 12. Admin: Mark Booking as Completed, Late, or No-Show
+// 12. Admin: Mark Booking as Completed, Late, or No-Show (With Penalty Emails)
 app.put(
   "/api/admin/bookings/status",
   authenticateToken,
@@ -509,9 +543,7 @@ app.put(
       const { bookingId, status, customerId } = req.body;
 
       if (!bookingId || !status || !customerId) {
-        return res
-          .status(400)
-          .json({ message: "Data update status tidak lengkap." });
+        return res.status(400).json({ message: "Incomplete status update data." });
       }
 
       await connection.beginTransaction();
@@ -521,18 +553,36 @@ app.put(
         bookingId,
       ]);
 
+      // Handle Penalty Logic
       if (status === "No-Show" || status === "Telat > 20 Mnt") {
         await connection.execute(
           "UPDATE users SET life_count = life_count - 1 WHERE id = ?",
           [customerId],
         );
 
+        // UPDATED: Fetch email and name for notification
         const [users] = await connection.execute(
-          "SELECT life_count FROM users WHERE id = ?",
+          "SELECT life_count, email, full_name FROM users WHERE id = ?",
           [customerId],
         );
         const currentLife = users[0].life_count;
+        const userEmail = users[0].email;
+        const userName = users[0].full_name;
 
+        // --- SEND PENALTY OR BLOCK EMAIL ---
+        let emailSubject = currentLife <= 0 ? "🚨 ACCOUNT SUSPENDED - BarberHub" : "⚠️ PENALTY WARNING - BarberHub";
+        let emailBody = currentLife <= 0 
+          ? `<p>Halo <strong>${userName}</strong>,</p><p>Sistem kami mencatat Anda <strong>${status}</strong> pada jadwal terbaru Anda. Akibatnya, Anda telah kehilangan seluruh Booking Credit (0/3 tersisa).</p><p style="color: red;"><strong>Akun Anda saat ini ditangguhkan.</strong> Silakan datang langsung ke barbershop untuk membuka kembali blokir akun Anda.</p>`
+          : `<p>Halo <strong>${userName}</strong>,</p><p>Anda menerima penalti karena <strong>${status}</strong> pada jadwal terbaru Anda. Booking Credit Anda berkurang 1.</p><p>Sisa credit Anda saat ini: <strong style="font-size: 1.2em; color: #eab308;">${currentLife} / 3</strong>.</p>`;
+
+        transporter.sendMail({
+          from: `"BarberHub Admin" <${process.env.EMAIL_USER}>`,
+          to: userEmail,
+          subject: emailSubject,
+          html: emailBody
+        }).catch(err => console.error("Failed to send penalty email:", err));
+
+        // If no lives left, auto-block the account
         if (currentLife <= 0) {
           await connection.execute(
             "UPDATE users SET is_blocked = true, life_count = 0 WHERE id = ?",
@@ -540,19 +590,19 @@ app.put(
           );
           await connection.commit();
           return res.status(200).json({
-            message: `Status diperbarui menjadi ${status}. Pengguna melanggar batas toleransi (0 Nyawa), akun otomatis diblokir.`,
+            message: `Status successfully updated to ${status}. User has exceeded tolerance (0 Life), account automatically blocked.`,
           });
         }
       }
 
       await connection.commit();
       res.status(200).json({
-        message: `Booking berhasil diperbarui menjadi status: ${status}!`,
+        message: `Booking successfully updated to status: ${status}!`,
       });
     } catch (error) {
       await connection.rollback();
       console.error("Admin Status Update Error:", error);
-      res.status(500).json({ message: "Gagal mengubah status booking." });
+      res.status(500).json({ message: "Failed to update booking status." });
     } finally {
       connection.release();
     }
@@ -573,11 +623,11 @@ app.delete(
       await db.execute("DELETE FROM barbers WHERE id = ?", [barberId]);
 
       res.status(200).json({
-        message: "Barber berhasil dihapus beserta seluruh jadwalnya.",
+        message: "Barber successfully deleted along with all their schedules.",
       });
     } catch (error) {
       console.error("Delete Barber Error:", error);
-      res.status(500).json({ message: "Gagal menghapus barber." });
+      res.status(500).json({ message: "Failed to delete barber." });
     }
   },
 );
@@ -608,10 +658,10 @@ app.put(
         );
       }
 
-      res.status(200).json({ message: "Data kapster berhasil diubah!" });
+      res.status(200).json({ message: "Barber data successfully updated!" });
     } catch (error) {
       console.error("Update Barber Error:", error);
-      res.status(500).json({ message: "Gagal mengubah data barber." });
+      res.status(500).json({ message: "Failed to update barber data." });
     }
   },
 );
@@ -628,7 +678,7 @@ app.get(
       res.status(200).json(customers);
     } catch (error) {
       console.error("Fetch Customers Error:", error);
-      res.status(500).json({ message: "Gagal mengambil data pelanggan." });
+      res.status(500).json({ message: "Failed to fetch customers." });
     }
   },
 );
@@ -650,10 +700,10 @@ app.put(
 
       res
         .status(200)
-        .json({ message: "Nyawa berhasil di-reset dan blokir dibuka!" });
+        .json({ message: "Life count successfully reset and block removed!" });
     } catch (error) {
       console.error("Reset Customer Error:", error);
-      res.status(500).json({ message: "Gagal mereset pelanggan." });
+      res.status(500).json({ message: "Failed to reset customer." });
     }
   },
 );
@@ -667,7 +717,7 @@ app.put("/api/users/:id", authenticateToken, async (req, res) => {
     if (req.user.id !== parseInt(userId)) {
       return res
         .status(403)
-        .json({ message: "Akses ditolak. Ini bukan akun Anda." });
+        .json({ message: "Access denied. This is not your account." });
     }
 
     await db.execute(
@@ -675,10 +725,10 @@ app.put("/api/users/:id", authenticateToken, async (req, res) => {
       [fullName, whatsapp, userId],
     );
 
-    res.status(200).json({ message: "Profil berhasil diperbarui!" });
+    res.status(200).json({ message: "Profile successfully updated!" });
   } catch (error) {
     console.error("Update Profile Error:", error);
-    res.status(500).json({ message: "Gagal memperbarui profil." });
+    res.status(500).json({ message: "Failed to update profile." });
   }
 });
 
@@ -703,7 +753,7 @@ cron.schedule(
       );
 
       console.log(
-        "Audit Selesai. Seluruh booking menggantung dialihkan ke status 'Requires Admin Review'.",
+        "Audit Completed. All pending bookings set to 'Requires Admin Review'.",
       );
     } catch (error) {
       console.error("Error running Cron Job Audit:", error);
@@ -714,6 +764,156 @@ cron.schedule(
     timezone: "Asia/Jakarta",
   },
 );
+
+// 18. Customer: Submit a Review
+app.post("/api/reviews", authenticateToken, async (req, res) => {
+  try {
+    const { bookingId, rating, reviewText } = req.body;
+    const customerId = req.user.id;
+
+    if (!bookingId || !rating) {
+      return res.status(400).json({ message: "Booking ID dan rating wajib diisi." });
+    }
+
+    // Check if booking belongs to this customer and is Completed
+    const [bookings] = await db.execute(
+      `SELECT b.id, ts.barber_id FROM bookings b 
+       JOIN time_slots ts ON b.time_slot_id = ts.id
+       WHERE b.id = ? AND b.customer_id = ? AND b.status = 'Completed'`,
+      [bookingId, customerId]
+    );
+
+    if (bookings.length === 0) {
+      return res.status(404).json({ message: "Booking tidak ditemukan atau belum selesai." });
+    }
+
+    const barberId = bookings[0].barber_id;
+
+    // Check if already reviewed
+    const [existing] = await db.execute(
+      "SELECT id FROM reviews WHERE booking_id = ?",
+      [bookingId]
+    );
+
+    if (existing.length > 0) {
+      return res.status(409).json({ message: "You have already reviewed this booking." });
+    }
+
+    // Insert review
+    await db.execute(
+      "INSERT INTO reviews (booking_id, customer_id, barber_id, rating, review_text) VALUES (?, ?, ?, ?, ?)",
+      [bookingId, customerId, barberId, rating, reviewText || ""]
+    );
+
+    // Recalculate barber's overall_rating
+    await db.execute(
+      `UPDATE barbers SET overall_rating = (
+         SELECT ROUND(AVG(rating), 1) FROM reviews WHERE barber_id = ?
+       ) WHERE id = ?`,
+      [barberId, barberId]
+    );
+
+    res.status(201).json({ message: "Review berhasil dikirim!" });
+
+  } catch (error) {
+    console.error("Review Error:", error);
+    res.status(500).json({ message: "Gagal mengirim review." });
+  }
+});
+
+// 19. Admin: Get Reviews for a Specific Barber
+app.get("/api/barbers/:id/reviews", authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const barberId = req.params.id;
+    const [reviews] = await db.execute(
+      `SELECT r.rating, r.review_text, r.created_at, u.full_name as customer_name 
+       FROM reviews r 
+       JOIN users u ON r.customer_id = u.id 
+       WHERE r.barber_id = ? 
+       ORDER BY r.created_at DESC`,
+      [barberId]
+    );
+    res.status(200).json(reviews);
+  } catch (error) {
+    console.error("Fetch Reviews Error:", error);
+    res.status(500).json({ message: "Failed to load reviews." });
+  }
+});
+
+// 3.5. Forgot Password (REQ-1.7)
+app.post("/api/forgot-password", async (req, res) => {
+  try {
+    const { email } = req.body;
+    const [users] = await db.execute("SELECT id, full_name FROM users WHERE email = ?", [email]);
+    
+    if (users.length === 0) {
+      return res.status(404).json({ message: "Jika email terdaftar, tautan reset akan dikirim." }); // Vague for security
+    }
+
+    // Generate secure 64-character token
+    const resetToken = crypto.randomBytes(32).toString("hex");
+    // Expiry: 15 minutes from now (SRS REQ-1.7)
+    const expireTime = new Date(Date.now() + 15 * 60 * 1000); 
+
+    await db.execute(
+      "UPDATE users SET reset_token = ?, reset_token_expires = ? WHERE id = ?",
+      [resetToken, expireTime, users[0].id]
+    );
+
+    const resetLink = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
+
+    await transporter.sendMail({
+      from: `"BarberHub Admin" <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject: "BarberHub - Password Reset Request",
+      html: `
+        <h3>Halo, ${users[0].full_name}</h3>
+        <p>Kami menerima permintaan untuk mereset password Anda.</p>
+        <p>Klik tautan di bawah ini untuk mengatur password baru. Tautan ini hanya berlaku selama <strong>15 menit</strong>.</p>
+        <a href="${resetLink}" style="padding: 10px 15px; background-color: #d4af37; color: #111827; text-decoration: none; border-radius: 5px; display: inline-block; margin-top: 10px;">Reset Password</a>
+        <p>Jika Anda tidak meminta ini, abaikan email ini.</p>
+      `
+    });
+
+    res.status(200).json({ message: "Instruksi reset password telah dikirim ke email Anda." });
+  } catch (error) {
+    console.error("Forgot Password Error:", error);
+    res.status(500).json({ message: "Gagal memproses permintaan." });
+  }
+});
+
+// 3.6. Reset Password Confirmation
+app.post("/api/reset-password", async (req, res) => {
+  try {
+    const { token, newPassword } = req.body;
+    
+    if (!token || !newPassword || newPassword.length < 8) {
+      return res.status(400).json({ message: "Token tidak valid atau password kurang dari 8 karakter." });
+    }
+
+    const [users] = await db.execute(
+      "SELECT id FROM users WHERE reset_token = ? AND reset_token_expires > NOW()",
+      [token]
+    );
+
+    if (users.length === 0) {
+      return res.status(400).json({ message: "Token reset password tidak valid atau sudah kedaluwarsa." });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    // Update password and clear token
+    await db.execute(
+      "UPDATE users SET password_hash = ?, reset_token = NULL, reset_token_expires = NULL WHERE id = ?",
+      [hashedPassword, users[0].id]
+    );
+
+    res.status(200).json({ message: "Password berhasil diubah. Silakan login." });
+  } catch (error) {
+    console.error("Reset Password Error:", error);
+    res.status(500).json({ message: "Gagal mereset password." });
+  }
+});
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {

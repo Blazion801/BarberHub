@@ -5,6 +5,8 @@ import Register from './components/auth/Register';
 import CustomerDashboard from './components/dashboard/CustomerDashboard';
 import ProtectedRoute from './components/common/ProtectedRoute';
 import AdminDashboard from './components/dashboard/AdminDashboard';
+import ForgotPassword from './components/auth/ForgotPassword';
+import ResetPassword from './components/auth/ResetPassword';
 
 function App() {
   return (
@@ -40,7 +42,8 @@ function App() {
         {/* Public Routes */}
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
-        
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         {/* Protected Customer Routes */}
         <Route 
           path="/dashboard" 
@@ -61,6 +64,7 @@ function App() {
           } 
         />
       </Routes>
+      
     </>
   );
 }

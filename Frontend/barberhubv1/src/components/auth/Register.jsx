@@ -9,7 +9,7 @@ export default function Register() {
   const [formData, setFormData] = useState({
     fullName: '', whatsapp: '', email: '', password: '', confirmPassword: ''
   });
-  const [error, setError] = '';
+  const [error, setError] = useState('');
   
   // UX FIX: Added state to toggle password visibility
   const [showPassword, setShowPassword] = useState(false);

@@ -16,6 +16,7 @@ import {
   Phone,
   Mail,
   ShieldCheck,
+  Star
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { useNavigate } from "react-router-dom";
@@ -40,6 +41,7 @@ export default function AdminDashboard() {
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
   const [dragActive, setDragActive] = useState(false);
+  const [reviewModal, setReviewModal] = useState({ isOpen: false, barberName: "", reviews: [], isLoading: false });
 
   // --- SCHEDULE STATES ---
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
@@ -301,6 +303,20 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleOpenReviews = async (barber) => {
+    setReviewModal({ isOpen: true, barberName: barber.name, reviews: [], isLoading: true });
+    try {
+      const token = localStorage.getItem("token");
+      const response = await axios.get(`http://localhost:5000/api/barbers/${barber.id}/reviews`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setReviewModal({ isOpen: true, barberName: barber.name, reviews: response.data, isLoading: false });
+    } catch (error) {
+      toast.error("Failed to load reviews.");
+      setReviewModal({ isOpen: false, barberName: "", reviews: [], isLoading: false });
+    }
+  };
+
   // --- SCHEDULE LOGIC ---
   const fetchSchedule = async (barber, date) => {
     setIsLoadingSchedule(true);
@@ -430,6 +446,10 @@ export default function AdminDashboard() {
                           {barber.specialty}
                         </td>
                         <td className="p-4 flex justify-end gap-3 text-barber-muted">
+
+                          <button onClick={() => handleOpenReviews(barber)} title="View Feedback" className="hover:text-yellow-400 bg-barber-bg p-2 rounded-md transition-colors">
+                            <Star size={18} />
+                          </button>
                           <button
                             onClick={() => handleOpenSchedule(barber)}
                             title="Check Schedule"
@@ -987,6 +1007,49 @@ export default function AdminDashboard() {
             <div className="flex gap-3">
               <button onClick={() => setIsLogoutModalOpen(false)} className="flex-1 py-3 rounded-xl font-bold text-barber-text bg-barber-bg hover:bg-barber-muted/10 transition-colors border border-barber-muted/20">Cancel</button>
               <button onClick={confirmLogout} className="flex-1 py-3 rounded-xl font-bold text-barber-bg bg-red-500 hover:bg-red-400 transition-all">Yes, Sign Out</button>
+            </div>
+          </div>A
+        </div>
+      )}
+      {/* --- MODAL 7: BARBER REVIEWS --- */}
+      {reviewModal.isOpen && (
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-barber-surface border border-barber-muted/20 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col max-h-[80vh]">
+            <div className="flex justify-between items-center p-6 border-b border-barber-muted/20 flex-shrink-0">
+              <div>
+                <h3 className="text-xl font-bold font-serif text-barber-text mb-1">Customer Feedback</h3>
+                <p className="text-sm text-barber-accent font-semibold">{reviewModal.barberName}</p>
+              </div>
+              <button onClick={() => setReviewModal({ ...reviewModal, isOpen: false })} className="text-barber-muted hover:text-red-400 transition-colors p-1 bg-barber-bg rounded-full">
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto flex-1">
+              {reviewModal.isLoading ? (
+                <div className="text-center py-10 text-barber-accent animate-pulse font-semibold">Loading feedback...</div>
+              ) : reviewModal.reviews.length === 0 ? (
+                <div className="text-center py-10 text-barber-muted bg-barber-bg rounded-xl border border-barber-muted/10">No reviews yet for this barber.</div>
+              ) : (
+                <div className="space-y-4">
+                  {reviewModal.reviews.map((review, idx) => (
+                    <div key={idx} className="bg-barber-bg border border-barber-muted/20 rounded-xl p-4">
+                      <div className="flex justify-between items-start mb-2">
+                        <span className="font-bold text-barber-text text-sm">{review.customer_name}</span>
+                        <span className="text-xs text-barber-muted">{new Date(review.created_at).toLocaleDateString()}</span>
+                      </div>
+                      <div className="flex gap-1 mb-2">
+                        {[1, 2, 3, 4, 5].map(star => (
+                          <Star key={star} size={14} className={star <= review.rating ? "text-yellow-400 fill-current" : "text-barber-muted/30"} />
+                        ))}
+                      </div>
+                      {review.review_text && (
+                        <p className="text-sm text-barber-text/80 italic bg-barber-surface p-3 rounded-lg border border-barber-muted/10">"{review.review_text}"</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
