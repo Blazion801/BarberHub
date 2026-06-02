@@ -21,10 +21,10 @@ import { useAuth } from "../../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import axios from "axios";
-import waQrCode from "../../assets/wa-qr.jpg"; // <-- ADD THIS IMPORT
+import waQrCode from "../../assets/wa-qr.jpg"; // <-- Restored exact import
 
 export default function CustomerDashboard() {
-  const { user, logout } = useAuth();
+  const { user, logout } = useAuth(); // <-- Restored real AuthContext
   const navigate = useNavigate();
 
   // --- APP NAVIGATION STATES ---
@@ -53,6 +53,11 @@ export default function CustomerDashboard() {
   // --- ACTION MODALS ---
   const [cancelData, setCancelData] = useState({ isOpen: false, bookingId: null, message: "", isPenalty: false });
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
+
+  // === NEW: REVIEW MODAL STATES (SRS 4.5) ===
+  const [reviewModal, setReviewModal] = useState({ isOpen: false, bookingId: null, barberName: "" });
+  const [reviewForm, setReviewForm] = useState({ rating: 0, comment: "" });
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
 
   // --- FETCH INITIAL DATA ---
   useEffect(() => {
@@ -210,7 +215,7 @@ export default function CustomerDashboard() {
   const executeCancellation = async () => {
     try {
       const token = localStorage.getItem("token");
-      const response = await axios.put("http://localhost:5000/api/bookings/cancel", 
+      await axios.put("http://localhost:5000/api/bookings/cancel", 
         { bookingId: cancelData.bookingId, customerId: user.id },
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -219,6 +224,35 @@ export default function CustomerDashboard() {
       setCancelData({ isOpen: false, bookingId: null, message: "", isPenalty: false });
       fetchUserProfile(); 
     } catch (error) { toast.error("Failed to cancel booking."); }
+  };
+
+  // === NEW: REVIEW SUBMISSION LOGIC (SRS 4.5) ===
+  const handleOpenReview = (bookingId, barberName) => {
+    setReviewModal({ isOpen: true, bookingId, barberName });
+    setReviewForm({ rating: 0, comment: "" }); 
+  };
+
+  const submitReview = async () => {
+    if (reviewForm.rating === 0) return toast.error("Please select a star rating.");
+    setIsSubmittingReview(true);
+    
+    try {
+      const token = localStorage.getItem("token");
+      await axios.post("http://localhost:5000/api/reviews", {
+        bookingId: reviewModal.bookingId,
+        rating: reviewForm.rating,
+        reviewText: reviewForm.comment
+      }, { headers: { Authorization: `Bearer ${token}` } });
+      
+      toast.success("Thank you for your feedback!");
+      setReviewModal({ isOpen: false, bookingId: null, barberName: "" });
+      fetchHistory(); 
+      fetchBarbers(); 
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to submit review. You may have already reviewed this booking.");
+    } finally {
+      setIsSubmittingReview(false);
+    }
   };
 
   const confirmLogout = () => {
@@ -431,6 +465,8 @@ export default function CustomerDashboard() {
                           {booking.status === "No-Show" && <span className="text-xs font-bold text-yellow-500 bg-yellow-500/10 px-3 py-1 rounded border border-yellow-500/20">NO-SHOW PENALTY</span>}
                         </div>
                       </div>
+                      
+                      {/* CANCEL BUTTON FOR UPCOMING */}
                       {booking.status === "Upcoming" && (
                         <div className="mt-4 pt-4 border-t border-barber-muted/10 flex justify-end">
                           <button onClick={() => handleCancelBooking(booking.id, booking.booking_date, booking.start_time)} className="text-sm font-semibold text-red-400 hover:text-red-300 transition-colors">
@@ -438,6 +474,29 @@ export default function CustomerDashboard() {
                           </button>
                         </div>
                       )}
+
+                      {/* NEW: LEAVE A REVIEW BUTTON FOR COMPLETED BOOKINGS (SRS 4.5) */}
+                      {/* NEW: DYNAMIC REVIEW UI (SRS 4.5) */}
+                      {booking.status === "Completed" && (
+                        <div className="mt-4 pt-4 border-t border-barber-muted/10 flex justify-end">
+                          {booking.rating ? (
+                            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-barber-bg border border-barber-muted/10 text-sm font-bold text-barber-text">
+                              <span className="text-barber-muted text-xs mr-1">You rated:</span>
+                              {[...Array(booking.rating)].map((_, i) => (
+                                <Star key={i} size={14} className="text-yellow-400 fill-current" />
+                              ))}
+                            </div>
+                          ) : (
+                            <button 
+                              onClick={() => handleOpenReview(booking.id, booking.barber_name)} 
+                              className="text-sm font-bold text-barber-accent hover:text-yellow-400 transition-colors flex items-center gap-1.5 bg-barber-accent/10 px-3 py-1.5 rounded-lg border border-barber-accent/20"
+                            >
+                              <Star size={16} /> Leave a Review
+                            </button>
+                          )}
+                        </div>
+                      )}
+
                     </div>
                   );
                 })}
@@ -607,10 +666,14 @@ export default function CustomerDashboard() {
                   ) : (
                     <div className="grid grid-cols-3 gap-3 max-h-60 overflow-y-auto pr-1">
                       {availableSlots.map((timeStr) => (
-                        <button key={timeStr} onClick={() => handleTimeClick(timeStr)} className="py-3 px-2 text-center rounded-xl font-bold border border-barber-muted/30 bg-barber-bg text-barber-text hover:border-barber-accent hover:text-barber-accent transition-all">
+                        <button 
+                          key={timeStr} 
+                          onClick={() => setSelectedTimeForConfirm(timeStr)} 
+                          className="py-3 px-2 text-center rounded-xl font-bold border border-barber-muted/30 bg-barber-bg text-barber-text hover:border-barber-accent hover:text-barber-accent transition-all"
+                          >
                           {timeStr.substring(0, 5)}
-                        </button>
-                      ))}
+                          </button>
+                        ))}
                     </div>
                   )}
                 </>
@@ -656,7 +719,57 @@ export default function CustomerDashboard() {
         </div>
       )}
 
-      {/* --- MODAL 3: LOGOUT CONFIRMATION --- */}
+      {/* === NEW MODAL 4: RATING & REVIEW (SRS 4.5) === */}
+      {reviewModal.isOpen && (
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-barber-surface border border-barber-muted/20 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl animate-in zoom-in duration-200 p-6">
+            <div className="flex justify-between items-start mb-6">
+              <div>
+                <h3 className="text-xl font-bold font-serif text-barber-text mb-1">Rate Your Experience</h3>
+                <p className="text-sm text-barber-muted">How was your haircut with {reviewModal.barberName}?</p>
+              </div>
+              <button onClick={() => setReviewModal({ isOpen: false, bookingId: null, barberName: "" })} className="text-barber-muted hover:text-red-400 transition-colors p-1 bg-barber-bg rounded-full">
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Star Selector */}
+            <div className="flex gap-2 justify-center mb-8">
+              {[1, 2, 3, 4, 5].map((star) => (
+                <button
+                  key={star}
+                  type="button"
+                  onClick={() => setReviewForm({ ...reviewForm, rating: star })}
+                  className={`transition-all transform hover:scale-110 ${reviewForm.rating >= star ? "text-yellow-400 drop-shadow-[0_0_8px_rgba(250,204,21,0.5)]" : "text-barber-muted/30"}`}
+                >
+                  <Star size={40} fill={reviewForm.rating >= star ? "currentColor" : "none"} strokeWidth={1.5} />
+                </button>
+              ))}
+            </div>
+
+            {/* Optional Comment */}
+            <div className="mb-6">
+              <label className="block text-xs font-bold text-barber-muted uppercase mb-2 tracking-wider ml-1">Write a Review (Optional)</label>
+              <textarea
+                value={reviewForm.comment}
+                onChange={(e) => setReviewForm({ ...reviewForm, comment: e.target.value })}
+                placeholder="Share your thoughts about the service..."
+                className="w-full px-4 py-3 rounded-xl bg-barber-bg border border-barber-muted/30 text-barber-text focus:border-barber-accent focus:outline-none resize-none h-24 placeholder-barber-muted/50"
+              />
+            </div>
+
+            <button 
+              onClick={submitReview} 
+              disabled={isSubmittingReview || reviewForm.rating === 0}
+              className="w-full bg-barber-accent text-barber-bg py-3.5 rounded-xl font-bold text-base hover:bg-opacity-90 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isSubmittingReview ? "Submitting..." : "Submit Review"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* --- MODAL 5: LOGOUT CONFIRMATION --- */}
       {isLogoutModalOpen && (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
           <div className="bg-barber-surface border border-barber-muted/20 rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl animate-in zoom-in duration-200 p-6 text-center">
@@ -672,7 +785,8 @@ export default function CustomerDashboard() {
           </div>
         </div>
       )}
-    {/* --- MOBILE BOTTOM NAV --- */}
+
+      {/* --- MOBILE BOTTOM NAV --- */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-barber-surface border-t border-barber-muted/20 flex justify-around items-center px-4 py-3 shadow-[0_-5px_20px_rgba(0,0,0,0.2)]">
         <button 
           onClick={() => setActiveTab("home")} 
@@ -697,9 +811,16 @@ export default function CustomerDashboard() {
           <MessageCircle size={22} />
           <span>Contact</span>
         </button>
+
+        {/* RESTORED PROFILE BUTTON */}
+        <button 
+          onClick={() => setActiveTab("profile")} 
+          className={`flex flex-col items-center gap-1 text-[10px] font-bold transition-colors ${activeTab === "profile" ? "text-barber-accent scale-110" : "text-barber-muted"}`}
+        >
+          <User size={22} />
+          <span>Profile</span>
+        </button>
       </div>
-
-
 
     </div>
   );
