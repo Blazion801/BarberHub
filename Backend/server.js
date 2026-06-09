@@ -6,13 +6,35 @@ const jwt = require("jsonwebtoken");
 const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
-const cron = require("node-cron"); // Pembetulan Eror 1: Require node-cron dipastikan ada!
+const cron = require("node-cron"); 
 const nodemailer = require("nodemailer");
-const crypto = require("crypto"); // Built into Node.js, no install needed
+const crypto = require("crypto"); 
 const db = require("./config/db");
 
 const app = express();
-app.use(cors());
+
+// --- CORS CONFIGURATION (THE FINAL FIX) ---
+const allowedOrigins = [
+  'http://localhost:5173', 
+  process.env.FRONTEND_URL, 
+  'https://barberhub-mu.vercel.app', 
+  'https://barberhub-a5klqp46a-blazions-projects.vercel.app' 
+];
+
+app.use(cors({
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.indexOf(origin) !== -1 || origin.includes('vercel.app')) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
 app.use(express.json());
 
 // --- UPLOAD ENGINE SETUP ---
@@ -24,7 +46,6 @@ const transporter = nodemailer.createTransport({
     pass: process.env.EMAIL_PASS,
   },
 });
-
 
 const uploadDir = path.join(__dirname, "uploads");
 if (!fs.existsSync(uploadDir)) {
@@ -59,12 +80,11 @@ const authenticateToken = (req, res, next) => {
         .status(403)
         .json({ message: "Token is not valid or has expired." });
     }
-    req.user = user; // Menyimpan data payload JWT (id, role, name) ke dalam request
+    req.user = user; 
     next();
   });
 };
 
-// Middleware Khusus Admin (Role-Based Access Control / RBAC)
 const requireAdmin = (req, res, next) => {
   if (req.user.role !== "Admin") {
     return res
@@ -189,13 +209,15 @@ app.get("/api/barbers", async (req, res) => {
   }
 });
 
-// 5. Create Barber
+// 5. Create Barber (FIXED UPLOAD URL)
 app.post("/api/barbers", upload.single("image"), async (req, res) => {
   try {
     const { fullName, specialty, experienceYears, price } = req.body;
     if (!req.file)
       return res.status(400).json({ message: "Photo is required." });
-    const photoUrl = `http://localhost:5000/uploads/${req.file.filename}`;
+    
+    // Engine Fix: Membuat URL gambar dinamis menyesuaikan environment (Railway atau Localhost)
+    const photoUrl = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
 
     await db.execute(
       "INSERT INTO barbers (full_name, specialty, experience_years, price, photo_url, status, overall_rating) VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -207,7 +229,7 @@ app.post("/api/barbers", upload.single("image"), async (req, res) => {
   }
 });
 
-// 6. Availability Engine (Lazy Loading & TIME TRAVEL FIX)
+// 6. Availability Engine 
 app.get("/api/availability", async (req, res) => {
   try {
     const { barberId, date } = req.query;
@@ -221,7 +243,6 @@ app.get("/api/availability", async (req, res) => {
       [barberId, date],
     );
 
-    // Jika belum ada jadwal di database untuk tanggal ini, buatkan otomatis (09:00 - 19:00)
     if (existingSlots.length === 0) {
       for (let hour = 9; hour <= 19; hour++) {
         const startTime = `${hour.toString().padStart(2, "0")}:00:00`;
@@ -238,17 +259,12 @@ app.get("/api/availability", async (req, res) => {
       [barberId, date],
     );
     
-    // --- THE TIME TRAVEL FIX ---
     const availableTimes = finalSlots
       .filter((slot) => {
-        // 1. Pastikan statusnya memang Available
         if (slot.status !== "Available") return false;
         
-        // 2. Cegah booking slot yang sudah lewat waktu (Masa Lalu)
         const slotDateTime = new Date(`${date}T${slot.start_time}`);
         const now = new Date();
-        
-        // Hanya kembalikan true jika waktu slot lebih besar dari waktu saat ini
         return slotDateTime > now; 
       })
       .map((slot) => slot.start_time);
@@ -260,8 +276,7 @@ app.get("/api/availability", async (req, res) => {
   }
 });
 
-// 7. Create a New Booking (With Concurrency Lock & Life Count Validation)
-// 7. Create a New Booking (With Concurrency Lock, Life Count Validation & Email Notification)
+// 7. Create a New Booking
 app.post("/api/bookings", authenticateToken, async (req, res) => {
   const connection = await db.getConnection();
   try {
@@ -273,7 +288,6 @@ app.post("/api/bookings", authenticateToken, async (req, res) => {
 
     await connection.beginTransaction();
 
-    // UPDATED: Now fetches email and full_name for the notification
     const [users] = await connection.execute(
       "SELECT life_count, is_blocked, email, full_name FROM users WHERE id = ?",
       [customerId],
@@ -292,7 +306,6 @@ app.post("/api/bookings", authenticateToken, async (req, res) => {
       });
     }
 
-    // --- CONCURRENCY LOCK (FOR UPDATE) ---
     const [slots] = await connection.execute(
       "SELECT id, status FROM time_slots WHERE barber_id = ? AND slot_date = ? AND start_time = ? FOR UPDATE",
       [barberId, date, time],
@@ -325,8 +338,6 @@ app.post("/api/bookings", authenticateToken, async (req, res) => {
     await connection.commit();
     res.status(201).json({ message: "Booking berhasil dikonfirmasi!" });
 
-    // --- FIRE AND FORGET EMAIL NOTIFICATION ---
-    // Note: We don't await this so the user isn't kept waiting for the SMTP server to respond
     transporter.sendMail({
       from: `"BarberHub System" <${process.env.EMAIL_USER}>`,
       to: user.email,
@@ -357,7 +368,7 @@ app.post("/api/bookings", authenticateToken, async (req, res) => {
   }
 });
 
-// 8. Get Customer Booking History (UPDATED WITH REVIEWS)
+// 8. Get Customer Booking History 
 app.get("/api/bookings/customer/:customerId", async (req, res) => {
   try {
     const { customerId } = req.params;
@@ -386,7 +397,7 @@ app.get("/api/bookings/customer/:customerId", async (req, res) => {
   }
 });
 
-// 9. Cancel a Booking (Handles status updates, 3-Hour Penalty, & Auto-Block)
+// 9. Cancel a Booking 
 app.put("/api/bookings/cancel", authenticateToken, async (req, res) => {
   const connection = await db.getConnection();
   try {
@@ -417,18 +428,15 @@ app.put("/api/bookings/cancel", authenticateToken, async (req, res) => {
 
     const timeSlotId = bookings[0].time_slot_id;
 
-    // FIX: Safely reconstruct the local date to prevent UTC timezone shifting bugs
     const rawDate = bookings[0].slot_date;
     const dateObj = new Date(rawDate);
     const year = dateObj.getFullYear();
     const month = String(dateObj.getMonth() + 1).padStart(2, '0');
     const day = String(dateObj.getDate()).padStart(2, '0');
     
-    // Construct local appointment time
     const appointmentTime = new Date(`${year}-${month}-${day}T${bookings[0].start_time}`);
     const now = new Date();
     
-    // Calculate difference
     const diffInHours = (appointmentTime - now) / (1000 * 60 * 60);
 
     await connection.execute(
@@ -440,7 +448,6 @@ app.put("/api/bookings/cancel", authenticateToken, async (req, res) => {
       [timeSlotId]
     );
 
-    // CHANGED TO 1 HOUR PENALTY RULE based on new requirements
     if (diffInHours < 1 && diffInHours > 0) {
       await connection.execute(
         "UPDATE users SET life_count = life_count - 1 WHERE id = ?",
@@ -484,12 +491,10 @@ app.put("/api/bookings/cancel", authenticateToken, async (req, res) => {
 });
 
 // 10. Get Fresh User Data
-// Mengambil detail satu user (Pelanggan)
 app.get("/api/users/:id", async (req, res) => {
   try {
     const userId = req.params.id;
 
-    // FIX: Tambahkan full_name, whatsapp, dan email agar bisa ditarik oleh halaman Profil!
     const [users] = await db.execute(
       "SELECT id, full_name, whatsapp, email, life_count, is_blocked FROM users WHERE id = ?",
       [userId],
@@ -532,7 +537,7 @@ app.get("/api/admin/bookings", async (req, res) => {
   }
 });
 
-// 12. Admin: Mark Booking as Completed, Late, or No-Show (With Penalty Emails)
+// 12. Admin: Mark Booking as Completed, Late, or No-Show
 app.put(
   "/api/admin/bookings/status",
   authenticateToken,
@@ -553,14 +558,12 @@ app.put(
         bookingId,
       ]);
 
-      // Handle Penalty Logic
       if (status === "No-Show" || status === "Telat > 20 Mnt") {
         await connection.execute(
           "UPDATE users SET life_count = life_count - 1 WHERE id = ?",
           [customerId],
         );
 
-        // UPDATED: Fetch email and name for notification
         const [users] = await connection.execute(
           "SELECT life_count, email, full_name FROM users WHERE id = ?",
           [customerId],
@@ -569,7 +572,6 @@ app.put(
         const userEmail = users[0].email;
         const userName = users[0].full_name;
 
-        // --- SEND PENALTY OR BLOCK EMAIL ---
         let emailSubject = currentLife <= 0 ? "🚨 ACCOUNT SUSPENDED - BarberHub" : "⚠️ PENALTY WARNING - BarberHub";
         let emailBody = currentLife <= 0 
           ? `<p>Halo <strong>${userName}</strong>,</p><p>Sistem kami mencatat Anda <strong>${status}</strong> pada jadwal terbaru Anda. Akibatnya, Anda telah kehilangan seluruh Booking Credit (0/3 tersisa).</p><p style="color: red;"><strong>Akun Anda saat ini ditangguhkan.</strong> Silakan datang langsung ke barbershop untuk membuka kembali blokir akun Anda.</p>`
@@ -582,7 +584,6 @@ app.put(
           html: emailBody
         }).catch(err => console.error("Failed to send penalty email:", err));
 
-        // If no lives left, auto-block the account
         if (currentLife <= 0) {
           await connection.execute(
             "UPDATE users SET is_blocked = true, life_count = 0 WHERE id = ?",
@@ -608,6 +609,7 @@ app.put(
     }
   },
 );
+
 // 13. Admin: Delete Barber
 app.delete(
   "/api/barbers/:id",
@@ -617,9 +619,6 @@ app.delete(
     try {
       const barberId = req.params.id;
 
-      // Menghapus barber dari database.
-      // Berkat fitur 'ON DELETE CASCADE' di SQL kalian,
-      // semua time_slots dan bookings milik barber ini akan otomatis ikut terhapus bersih!
       await db.execute("DELETE FROM barbers WHERE id = ?", [barberId]);
 
       res.status(200).json({
@@ -632,7 +631,7 @@ app.delete(
   },
 );
 
-// 14. Admin: Update/Edit Barber
+// 14. Admin: Update/Edit Barber (FIXED UPLOAD URL)
 app.put(
   "/api/barbers/:id",
   authenticateToken,
@@ -643,15 +642,15 @@ app.put(
       const barberId = req.params.id;
       const { fullName, specialty, experienceYears, price } = req.body;
 
-      // Cek apakah admin mengupload foto baru atau pakai foto lama
       if (req.file) {
-        const imageUrl = `http://localhost:5000/uploads/${req.file.filename}`;
+        // Engine Fix: Membuat URL dinamis
+        const imageUrl = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
+        
         await db.execute(
           "UPDATE barbers SET full_name = ?, specialty = ?, experience_years = ?, price = ?, photo_url = ? WHERE id = ?",
           [fullName, specialty, experienceYears, price, imageUrl, barberId],
         );
       } else {
-        // Kalau foto nggak diganti, update teksnya aja
         await db.execute(
           "UPDATE barbers SET full_name = ?, specialty = ?, experience_years = ?, price = ? WHERE id = ?",
           [fullName, specialty, experienceYears, price, barberId],
@@ -665,6 +664,7 @@ app.put(
     }
   },
 );
+
 // 15. Admin: Mengambil Daftar Semua Pelanggan
 app.get(
   "/api/admin/customers",
@@ -692,7 +692,6 @@ app.put(
     try {
       const customerId = req.params.id;
 
-      // Kembalikan nyawa jadi 3 dan pastikan status blokir dicabut
       await db.execute(
         "UPDATE users SET life_count = 3, is_blocked = FALSE WHERE id = ?",
         [customerId],
@@ -707,13 +706,13 @@ app.put(
     }
   },
 );
+
 // 17. Customer: Update Data Profil
 app.put("/api/users/:id", authenticateToken, async (req, res) => {
   try {
     const userId = req.params.id;
     const { fullName, whatsapp } = req.body;
 
-    // Keamanan berlapis: Pastikan yang ngedit beneran yang punya akun
     if (req.user.id !== parseInt(userId)) {
       return res
         .status(403)
@@ -740,7 +739,6 @@ cron.schedule(
     try {
       const todayStr = new Date().toISOString().split("T")[0];
 
-      // Pembetulan Eror 3: Perbaikan query update join yang aman untuk seluruh versi MySQL engine
       await db.execute(
         `
             UPDATE bookings 
@@ -775,7 +773,6 @@ app.post("/api/reviews", authenticateToken, async (req, res) => {
       return res.status(400).json({ message: "Booking ID dan rating wajib diisi." });
     }
 
-    // Check if booking belongs to this customer and is Completed
     const [bookings] = await db.execute(
       `SELECT b.id, ts.barber_id FROM bookings b 
        JOIN time_slots ts ON b.time_slot_id = ts.id
@@ -789,7 +786,6 @@ app.post("/api/reviews", authenticateToken, async (req, res) => {
 
     const barberId = bookings[0].barber_id;
 
-    // Check if already reviewed
     const [existing] = await db.execute(
       "SELECT id FROM reviews WHERE booking_id = ?",
       [bookingId]
@@ -799,13 +795,11 @@ app.post("/api/reviews", authenticateToken, async (req, res) => {
       return res.status(409).json({ message: "You have already reviewed this booking." });
     }
 
-    // Insert review
     await db.execute(
       "INSERT INTO reviews (booking_id, customer_id, barber_id, rating, review_text) VALUES (?, ?, ?, ?, ?)",
       [bookingId, customerId, barberId, rating, reviewText || ""]
     );
 
-    // Recalculate barber's overall_rating
     await db.execute(
       `UPDATE barbers SET overall_rating = (
          SELECT ROUND(AVG(rating), 1) FROM reviews WHERE barber_id = ?
@@ -840,19 +834,17 @@ app.get("/api/barbers/:id/reviews", authenticateToken, requireAdmin, async (req,
   }
 });
 
-// 3.5. Forgot Password (REQ-1.7)
+// 3.5. Forgot Password
 app.post("/api/forgot-password", async (req, res) => {
   try {
     const { email } = req.body;
     const [users] = await db.execute("SELECT id, full_name FROM users WHERE email = ?", [email]);
     
     if (users.length === 0) {
-      return res.status(404).json({ message: "Jika email terdaftar, tautan reset akan dikirim." }); // Vague for security
+      return res.status(404).json({ message: "Jika email terdaftar, tautan reset akan dikirim." }); 
     }
 
-    // Generate secure 64-character token
     const resetToken = crypto.randomBytes(32).toString("hex");
-    // Expiry: 15 minutes from now (SRS REQ-1.7)
     const expireTime = new Date(Date.now() + 15 * 60 * 1000); 
 
     await db.execute(
@@ -902,7 +894,6 @@ app.post("/api/reset-password", async (req, res) => {
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
 
-    // Update password and clear token
     await db.execute(
       "UPDATE users SET password_hash = ?, reset_token = NULL, reset_token_expires = NULL WHERE id = ?",
       [hashedPassword, users[0].id]
