@@ -26,7 +26,8 @@ import waQrCode from "../../assets/wa-qr.jpg"; // <-- Restored exact import
 export default function CustomerDashboard() {
   const { user, logout } = useAuth(); // <-- Restored real AuthContext
   const navigate = useNavigate();
-
+  // ADD THIS LINE:
+  const API_URL = import.meta.env.VITE_API_URL;
   // --- APP NAVIGATION STATES ---
   const [activeTab, setActiveTab] = useState("home"); // home, history, profile, contact
 
@@ -72,7 +73,7 @@ export default function CustomerDashboard() {
 
   const fetchBarbers = async () => {
     try {
-      const response = await axios.get("http://localhost:5000/api/barbers");
+      const response = await axios.get(`${API_URL}/api/barbers`);
       setBarbers(response.data || []);
     } catch (error) { console.error("Error fetching barbers:", error); }
   };
@@ -81,7 +82,7 @@ export default function CustomerDashboard() {
     if (!user?.id) return;
     setIsLoadingHistory(true);
     try {
-      const response = await axios.get(`http://localhost:5000/api/bookings/customer/${user.id}`);
+      const response = await axios.get(`${API_URL}/api/bookings/customer/${user.id}`);
       setBookingHistory(response.data || []); 
     } catch (error) { toast.error("Failed to load booking history."); }
     finally { setIsLoadingHistory(false); }
@@ -90,7 +91,7 @@ export default function CustomerDashboard() {
   const fetchUserProfile = async () => {
     if (!user?.id) return;
     try {
-      const response = await axios.get(`http://localhost:5000/api/users/${user.id}`);
+      const response = await axios.get(`${API_URL}/api/users/${user.id}`);
       const data = response.data || {};
       setCurrentLifeCount(data.life_count ?? 3);
       setProfileData({
@@ -121,7 +122,7 @@ export default function CustomerDashboard() {
     try {
       const token = localStorage.getItem("token");
       await axios.put(
-        `http://localhost:5000/api/users/${user.id}`,
+        `${API_URL}/api/users/${user.id}`,
         { fullName: profileData.fullName, whatsapp: profileData.whatsapp },
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -149,7 +150,7 @@ export default function CustomerDashboard() {
   const fetchAvailableSlots = async (barberId, dateString) => {
     setIsLoadingSlots(true);
     try {
-      const response = await axios.get(`http://localhost:5000/api/availability?barberId=${barberId}&date=${dateString}`);
+      const response = await axios.get(`${API_URL}/api/availability?barberId=${barberId}&date=${dateString}`);
       setAvailableSlots(response.data || []);
     } catch (error) { console.error("Error slots:", error); }
     finally { setIsLoadingSlots(false); }
@@ -178,7 +179,7 @@ export default function CustomerDashboard() {
     try {
       const payload = { customerId: user.id, barberId: selectedBarber.id, date: selectedDate, time: selectedTimeForConfirm };
       const token = localStorage.getItem("token");
-      await axios.post("http://localhost:5000/api/bookings", payload, { headers: { Authorization: `Bearer ${token}` } });
+      await axios.post(`${API_URL}/api/bookings`, payload, { headers: { Authorization: `Bearer ${token}` } });
       
       toast.success("Booking confirmed!");
       setIsBookingModalOpen(false);
@@ -215,7 +216,7 @@ export default function CustomerDashboard() {
   const executeCancellation = async () => {
     try {
       const token = localStorage.getItem("token");
-      await axios.put("http://localhost:5000/api/bookings/cancel", 
+      await axios.put(`${API_URL}/api/bookings/cancel`, 
         { bookingId: cancelData.bookingId, customerId: user.id },
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -238,7 +239,7 @@ export default function CustomerDashboard() {
     
     try {
       const token = localStorage.getItem("token");
-      await axios.post("http://localhost:5000/api/reviews", {
+      await axios.post(`${API_URL}/api/reviews`, {
         bookingId: reviewModal.bookingId,
         rating: reviewForm.rating,
         reviewText: reviewForm.comment
@@ -249,7 +250,7 @@ export default function CustomerDashboard() {
       fetchHistory(); 
       fetchBarbers(); 
     } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to submit review. You may have already reviewed this booking.");
+      toast.error(error.response?.data?.message || "Failed to submit review.");
     } finally {
       setIsSubmittingReview(false);
     }
