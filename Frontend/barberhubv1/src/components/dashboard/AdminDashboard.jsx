@@ -1008,7 +1008,7 @@ export default function AdminDashboard() {
               <button onClick={() => setIsLogoutModalOpen(false)} className="flex-1 py-3 rounded-xl font-bold text-barber-text bg-barber-bg hover:bg-barber-muted/10 transition-colors border border-barber-muted/20">Cancel</button>
               <button onClick={confirmLogout} className="flex-1 py-3 rounded-xl font-bold text-barber-bg bg-red-500 hover:bg-red-400 transition-all">Yes, Sign Out</button>
             </div>
-          </div>A
+          </div>
         </div>
       )}
       {/* --- MODAL 7: BARBER REVIEWS --- */}
