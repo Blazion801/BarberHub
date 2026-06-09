@@ -13,10 +13,7 @@ export const AuthProvider = ({ children }) => {
   const login = async (email, password) => {
     try {
       const API_URL = import.meta.env.VITE_API_URL;
-      const response = await fetch(`${API_URL}/api/login`, {
-        email,
-        password,
-      });
+      const response = await axios.post(`${API_URL}/api/login`, { email, password });
 
       // Save the user data to state
       setUser(response.data.user);
