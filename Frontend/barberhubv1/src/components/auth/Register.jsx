@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowLeft, User, Phone, Mail, Lock, UserPlus } from 'lucide-react';
+import { Eye, EyeOff } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import toast from 'react-hot-toast';
@@ -10,6 +10,10 @@ export default function Register() {
     fullName: '', whatsapp: '', email: '', password: '', confirmPassword: ''
   });
   const [error, setError] = useState('');
+  
+  // UX FIX: Added state to toggle password visibility
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -18,20 +22,20 @@ export default function Register() {
     setError('');
   };
 
-const handleSubmit = async (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
 
     if (formData.whatsapp.length < 10) { 
-      setError('Nomor WhatsApp minimal 10 angka.'); 
+      setError('WhatsApp number must be at least 10 digits.'); 
       return; 
     }
     if (formData.password.length < 8) { 
-      setError('Password minimal 8 karakter.'); 
+      setError('Password must be at least 8 characters.'); 
       return; 
     }
     if (formData.password !== formData.confirmPassword) { 
-      setError('Konfirmasi password tidak cocok.'); 
+      setError('Passwords do not match.'); 
       return; 
     }
 
@@ -44,7 +48,7 @@ const handleSubmit = async (e) => {
       });
 
       if (response.status === 201) {
-        toast.success('Akun berhasil dibuat! Silakan masuk.');
+        toast.success('Account created successfully! Please sign in.');
         
         setTimeout(() => {
           navigate('/login');
@@ -52,83 +56,113 @@ const handleSubmit = async (e) => {
       }
     } catch (err) {
       console.error('Registration API Error:', err);
-      toast.error(err.response?.data?.message || 'Gagal terhubung ke server backend.');
-      // setError(err.response?.data?.message || 'Gagal terhubung ke server backend.');
+      toast.error(err.response?.data?.message || 'Failed to connect to the backend server.');
+      setError(err.response?.data?.message || 'Failed to connect to the backend server.');
     }
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-barber-bg font-sans">
-      
-      {/* Top Navigation */}
-      <div className="px-6 py-6 flex items-center gap-4">
-        <button onClick={() => navigate(-1)} className="text-barber-accent hover:text-barber-text transition-colors">
-          <ArrowLeft size={24} />
-        </button>
-        <h2 className="text-barber-text text-lg font-semibold">Buat Akun Baru</h2>
-      </div>
-
-      <div className="px-6 flex-1">
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-barber-accent leading-tight mb-2 font-serif">
-            Mulai Perjalanan<br />Gaya Anda.
+    <div className="min-h-screen flex flex-col justify-center items-center bg-barber-bg px-6 font-sans">
+      <div className="w-full max-w-sm">
+        
+        {/* Header */}
+        <div className="text-center mb-10">
+          <h1 className="text-5xl font-bold text-barber-accent mb-3 tracking-wide font-serif italic">
+            BarberHub
           </h1>
-          <p className="text-barber-text/80 text-sm pr-4 leading-relaxed">
-            Isi data dirimu untuk mulai booking layanan eksklusif kami.
+          <p className="text-barber-text/80 text-sm">
+            Start Your Style Journey
           </p>
         </div>
 
         {error && (
-          <div className="mb-4 p-3 bg-red-900/30 text-red-400 border border-red-900/50 rounded-lg text-sm">
+          <div className="mb-4 p-3 bg-red-900/30 text-red-400 border border-red-900/50 rounded-lg text-sm text-center">
             {error}
           </div>
         )}
 
-        <form id="register-form" onSubmit={handleSubmit} className="space-y-4 pb-24">
-          {[
-            { label: 'Nama Lengkap', name: 'fullName', type: 'text', icon: User, placeholder: 'John Doe' },
-            { label: 'Nomor WhatsApp', name: 'whatsapp', type: 'tel', icon: Phone, placeholder: '081234567890' },
-            { label: 'Email', name: 'email', type: 'email', icon: Mail, placeholder: 'johndoe@example.com' },
-            { label: 'Password', name: 'password', type: 'password', icon: Lock, placeholder: '••••••••' },
-            { label: 'Konfirmasi Password', name: 'confirmPassword', type: 'password', icon: Lock, placeholder: '••••••••' }
-          ].map((field) => (
-            <div key={field.name}>
-              <label className="block text-xs font-semibold text-barber-text mb-2 tracking-wider uppercase">{field.label}</label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                  <field.icon size={18} className="text-barber-muted" />
-                </div>
-                <input
-                  type={field.type}
-                  name={field.name}
-                  value={formData[field.name]}
-                  onChange={handleChange}
-                  placeholder={field.placeholder}
-                  required
-                  className="w-full pl-12 pr-4 py-3.5 rounded-xl bg-barber-surface text-barber-text placeholder-barber-muted border border-barber-muted/30 focus:border-barber-accent focus:outline-none focus:ring-1 focus:ring-barber-accent transition-all"
-                />
-              </div>
+        {/* Form */}
+        <form id="register-form" onSubmit={handleSubmit} className="space-y-5">
+          
+          <div>
+            <label className="block text-xs font-semibold text-barber-text uppercase mb-2 tracking-wider">Full Name</label>
+            <input
+              type="text" name="fullName" value={formData.fullName} onChange={handleChange} placeholder="John Doe" required
+              className="w-full px-4 py-4 rounded-lg bg-barber-surface text-barber-text placeholder-barber-muted border border-barber-muted/30 focus:border-barber-accent focus:outline-none focus:ring-1 focus:ring-barber-accent transition-all"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-barber-text uppercase mb-2 tracking-wider">WhatsApp Number</label>
+            <input
+              type="tel" name="whatsapp" value={formData.whatsapp} onChange={handleChange} placeholder="081234567890" required
+              className="w-full px-4 py-4 rounded-lg bg-barber-surface text-barber-text placeholder-barber-muted border border-barber-muted/30 focus:border-barber-accent focus:outline-none focus:ring-1 focus:ring-barber-accent transition-all"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-barber-text uppercase mb-2 tracking-wider">Email</label>
+            <input
+              type="email" name="email" value={formData.email} onChange={handleChange} placeholder="name@email.com" required
+              className="w-full px-4 py-4 rounded-lg bg-barber-surface text-barber-text placeholder-barber-muted border border-barber-muted/30 focus:border-barber-accent focus:outline-none focus:ring-1 focus:ring-barber-accent transition-all"
+            />
+          </div>
+
+          {/* Password Field with Eye Icon */}
+          <div>
+            <label className="block text-xs font-semibold text-barber-text uppercase mb-2 tracking-wider">Password</label>
+            <div className="relative">
+              <input
+                type={showPassword ? "text" : "password"} 
+                name="password" value={formData.password} onChange={handleChange} placeholder="••••••••" required
+                className="w-full px-4 py-4 rounded-lg bg-barber-surface text-barber-text placeholder-barber-muted border border-barber-muted/30 focus:border-barber-accent focus:outline-none focus:ring-1 focus:ring-barber-accent transition-all"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-4 top-1/2 transform -translate-y-1/2 text-barber-muted hover:text-barber-text transition-colors"
+              >
+                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+              </button>
             </div>
-          ))}
+          </div>
+
+          {/* Confirm Password Field with Eye Icon */}
+          <div>
+            <label className="block text-xs font-semibold text-barber-text uppercase mb-2 tracking-wider">Confirm Password</label>
+            <div className="relative">
+              <input
+                type={showConfirmPassword ? "text" : "password"} 
+                name="confirmPassword" value={formData.confirmPassword} onChange={handleChange} placeholder="••••••••" required
+                className="w-full px-4 py-4 rounded-lg bg-barber-surface text-barber-text placeholder-barber-muted border border-barber-muted/30 focus:border-barber-accent focus:outline-none focus:ring-1 focus:ring-barber-accent transition-all"
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                className="absolute right-4 top-1/2 transform -translate-y-1/2 text-barber-muted hover:text-barber-text transition-colors"
+              >
+                {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+              </button>
+            </div>
+          </div>
+
+          <div className="pt-4">
+            <button
+              type="submit"
+              className="w-full bg-barber-accent text-barber-bg py-4 rounded-lg font-bold text-base hover:bg-opacity-90 transition-all active:scale-[0.98]"
+            >
+              Sign Up
+            </button>
+          </div>
         </form>
-      </div>
 
-      <div className="bg-barber-surface mt-auto rounded-t-[32px] px-6 py-8 shadow-[0_-10px_40px_rgba(0,0,0,0.5)] border-t border-barber-muted/20">
-        <button
-          form="register-form"
-          type="submit"
-          className="w-full bg-barber-accent text-barber-bg py-4 rounded-xl font-bold flex justify-center items-center gap-2 hover:bg-opacity-90 transition-all active:scale-[0.98]"
-        >
-          <UserPlus size={20} />
-          Daftar Sekarang
-        </button>
-
-        <div className="mt-6 text-center text-sm text-barber-text/80">
-          Sudah punya akun?{' '}
+        <div className="mt-10 text-center text-sm text-barber-text/70">
+          Already have an account?{' '}
           <Link to="/login" className="text-barber-accent font-semibold hover:underline">
-            Masuk
+            Sign In
           </Link>
         </div>
+        
       </div>
     </div>
   );

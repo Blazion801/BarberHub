@@ -21,7 +21,7 @@ export default function Login() {
     const result = await login(formData.email, formData.password);
     
     if (result.success) {
-      toast.success('Login berhasil!');
+      toast.success('Login successful!');
       
       if (result.role === 'Admin') {
         navigate('/admin/dashboard');
@@ -43,7 +43,7 @@ export default function Login() {
             BarberHub
           </h1>
           <p className="text-barber-text/80 text-sm">
-            Selamat datang kembali, silakan masuk
+            Welcome back, please sign in
           </p>
         </div>
 
@@ -59,7 +59,7 @@ export default function Login() {
               name="email"
               value={formData.email}
               onChange={handleChange}
-              placeholder="nama@email.com"
+              placeholder="name@email.com"
               required
               className="w-full px-4 py-4 rounded-lg bg-barber-surface text-barber-text placeholder-barber-muted border border-barber-muted/30 focus:border-barber-accent focus:outline-none focus:ring-1 focus:ring-barber-accent transition-all"
             />
@@ -90,7 +90,7 @@ export default function Login() {
             
             <div className="mt-4 text-right">
               <Link to="/forgot-password" className="text-sm text-barber-text/80 hover:text-barber-accent transition-colors">
-                Lupa Password?
+                Forgot Password?
               </Link>
             </div>
           </div>
@@ -100,15 +100,15 @@ export default function Login() {
               type="submit"
               className="w-full bg-barber-accent text-barber-bg py-4 rounded-lg font-bold text-base hover:bg-opacity-90 transition-all active:scale-[0.98]"
             >
-              Masuk
+              Sign In
             </button>
           </div>
         </form>
 
         <div className="mt-10 text-center text-sm text-barber-text/70">
-          Belum punya akun?{' '}
+          Don't have an account?{' '}
           <Link to="/register" className="text-barber-accent font-semibold hover:underline">
-            Daftar di sini
+            Register here
           </Link>
         </div>
         
