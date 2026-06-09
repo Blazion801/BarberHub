@@ -26,7 +26,7 @@ import axios from "axios";
 export default function AdminDashboard() {
   const { logout } = useAuth();
   const navigate = useNavigate();
-
+  const API_URL = import.meta.env.VITE_API_URL;
   const [activeTab, setActiveTab] = useState("barbers");
 
   // --- BARBER STATES ---
@@ -89,7 +89,7 @@ export default function AdminDashboard() {
     try {
       const token = localStorage.getItem("token");
       const response = await axios.get(
-        "http://localhost:5000/api/admin/customers",
+        `${API_URL}/api/admin/customers`,
         {
           headers: { Authorization: `Bearer ${token}` },
         },
@@ -108,7 +108,7 @@ export default function AdminDashboard() {
     try {
       const token = localStorage.getItem("token");
       await axios.put(
-        `http://localhost:5000/api/admin/customers/${resetDialog.customerId}/reset`,
+        `${API_URL}/api/admin/customers/${resetDialog.customerId}/reset`,
         {},
         {
           headers: { Authorization: `Bearer ${token}` },
@@ -144,7 +144,7 @@ export default function AdminDashboard() {
   // --- FETCHERS ---
   const fetchBarbers = async () => {
     try {
-      const response = await axios.get("http://localhost:5000/api/barbers");
+      const response = await axios.get(`${API_URL}/api/barbers`);
       setBarbers(response.data);
     } catch (error) {
       toast.error("Failed to load barbers.");
@@ -155,7 +155,7 @@ export default function AdminDashboard() {
     setIsLoadingDaily(true);
     try {
       const response = await axios.get(
-        `http://localhost:5000/api/admin/bookings?date=${adminDate}`,
+        `${API_URL}/api/admin/bookings?date=${adminDate}`,
       );
       setDailyBookings(response.data);
     } catch (error) {
@@ -177,7 +177,7 @@ export default function AdminDashboard() {
     try {
       const token = localStorage.getItem("token");
       await axios.put(
-        "http://localhost:5000/api/admin/bookings/status",
+        `${API_URL}/api/admin/bookings/status`,
         { bookingId, status: newStatus, customerId },
         { headers: { Authorization: `Bearer ${token}` } },
       );
@@ -241,13 +241,13 @@ export default function AdminDashboard() {
 
       if (editingBarberId) {
         await axios.put(
-          `http://localhost:5000/api/barbers/${editingBarberId}`,
+          `${API_URL}/api/barbers/${editingBarberId}`,
           submitData,
           config,
         );
         toast.success("Barber updated successfully!");
       } else {
-        await axios.post("http://localhost:5000/api/barbers", submitData, config);
+        await axios.post(`${API_URL}/api/barbers`, submitData, config);
         toast.success("Barber added successfully!");
       }
 
@@ -292,7 +292,7 @@ export default function AdminDashboard() {
     try {
       const token = localStorage.getItem("token");
       await axios.delete(
-        `http://localhost:5000/api/barbers/${deleteDialog.barberId}`,
+        `${API_URL}/api/barbers/${deleteDialog.barberId}`,
         { headers: { Authorization: `Bearer ${token}` } },
       );
       toast.success(`${deleteDialog.barberName} deleted successfully!`);
@@ -307,7 +307,7 @@ export default function AdminDashboard() {
     setReviewModal({ isOpen: true, barberName: barber.name, reviews: [], isLoading: true });
     try {
       const token = localStorage.getItem("token");
-      const response = await axios.get(`http://localhost:5000/api/barbers/${barber.id}/reviews`, {
+      const response = await axios.get(`${API_URL}/api/barbers/${barber.id}/reviews`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setReviewModal({ isOpen: true, barberName: barber.name, reviews: response.data, isLoading: false });
@@ -322,7 +322,7 @@ export default function AdminDashboard() {
     setIsLoadingSchedule(true);
     try {
       const response = await axios.get(
-        `http://localhost:5000/api/availability?barberId=${barber.id}&date=${date}`,
+        `${API_URL}/api/availability?barberId=${barber.id}&date=${date}`,
       );
       setAvailableSlots(response.data);
     } catch (error) {
