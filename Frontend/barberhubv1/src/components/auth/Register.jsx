@@ -41,7 +41,7 @@ export default function Register() {
 
     try {
       const API_URL = import.meta.env.VITE_API_URL
-      const response = await axios.post(`${API_URL}/api/register', {
+      const response = await axios.post('${API_URL}/api/register', {
         name: formData.fullName, 
         whatsapp: formData.whatsapp,
         email: formData.email,
