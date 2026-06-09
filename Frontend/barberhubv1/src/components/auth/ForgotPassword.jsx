@@ -9,13 +9,18 @@ export default function ForgotPassword() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSent, setIsSent] = useState(false);
 
+  // 1. Define the API URL here
+  const API_URL = import.meta.env.VITE_API_URL;
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!email) return toast.error("Silakan masukkan email Anda.");
 
     setIsSubmitting(true);
     try {
-      const response = await axios.post("http://localhost:5000/api/forgot-password", { email });
+      // 2. Replace the hardcoded localhost with the dynamic variable
+      const response = await axios.post(`${API_URL}/api/forgot-password`, { email });
+      
       toast.success(response.data.message || "Tautan reset telah dikirim!");
       setIsSent(true);
     } catch (error) {
